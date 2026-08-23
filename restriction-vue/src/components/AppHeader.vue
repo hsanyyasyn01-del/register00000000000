@@ -7,9 +7,9 @@
         <span class="text-[11px] text-txt-faint">{{ t('accountCenter') }}</span>
       </div>
       <div class="flex-1" />
-      <div class="hidden sm:flex items-center gap-1.5 text-[11px] text-txt-faint" v-if="heartbeatOk !== null">
-        <span class="w-1.5 h-1.5 rounded-full" :class="heartbeatOk ? 'bg-success' : 'bg-warn'" />
-        <span>{{ heartbeatOk ? 'Live' : 'Retry' }}</span>
+      <div class="hidden sm:flex items-center gap-1.5 text-[11px] text-txt-faint" v-if="heartbeatOk === true">
+        <span class="w-1.5 h-1.5 rounded-full bg-success" />
+        <span>Live</span>
       </div>
     </div>
   </header>

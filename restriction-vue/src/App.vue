@@ -109,7 +109,9 @@ onMounted(async () => {
     track('restriction_profile_view', { appealStatus: session.profile.appealStatus || 'none' })
   }
 
-  startHeartbeat(config.features.heartbeatMs || 25000, (info) => ui.setHeartbeat(info))
+  if (session.source !== 'injected') {
+    startHeartbeat(config.features.heartbeatMs || 25000, (info) => ui.setHeartbeat(info))
+  }
 
   window.addEventListener('beforeunload', () => {
     stopHeartbeat()

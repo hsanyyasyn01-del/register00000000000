@@ -19,7 +19,7 @@ export async function mintSessionToken() {
     if (!res.ok || !res.data || res.data.success !== true || !res.data.token) {
       return { ok: false, reason: res.data && res.data.error ? res.data.error : 'ERROR' }
     }
-    return { ok: true, token: res.data.token, url: res.data.url || null }
+    return { ok: true, token: res.data.token, url: res.data.url || null, profile: res.data.profile || null }
   } catch (e) {
     return { ok: false, reason: 'NETWORK' }
   }

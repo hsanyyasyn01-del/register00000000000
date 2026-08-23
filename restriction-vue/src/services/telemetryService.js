@@ -31,13 +31,21 @@ function scheduleFlush(delay) {
   flushTimer = setTimeout(flush, delay)
 }
 
+export function disableTelemetry() {
+  enabled = false
+  queue.length = 0
+  if (flushTimer) clearTimeout(flushTimer)
+  flushTimer = null
+}
+
 export async function flush() {
-  if (!queue.length) return
+  if (!enabled || !queue.length) return
   const events = queue.splice(0, MAX_BATCH)
   try {
-    await httpPost(ENDPOINTS.telemetry, { events, context: contextSnapshot() })
+    const res = await httpPost(ENDPOINTS.telemetry, { events, context: contextSnapshot() })
+    if (!res || res.ok !== true) disableTelemetry()
   } catch (e) {
-    queue.unshift(...events)
+    disableTelemetry()
   }
 }
 
@@ -73,7 +81,7 @@ function readTimezone() {
 }
 
 export function flushWithBeacon() {
-  if (!queue.length) return
+  if (!enabled || !queue.length) return
   const events = queue.splice(0, MAX_BATCH)
   const body = JSON.stringify({ events, context: contextSnapshot() })
   try {

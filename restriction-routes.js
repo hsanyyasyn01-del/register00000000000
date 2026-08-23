@@ -92,9 +92,15 @@ function generateRestrictionToken() {
 }
 
 function issueRestrictionToken(userId) {
+    const now = Date.now();
+    for (const [existing, entry] of restrictionTokens.entries()) {
+        if (entry.userId === userId && now - entry.createdAt <= RESTRICTION_TOKEN_TTL) {
+            return { token: existing, reference: entry.reference };
+        }
+    }
     const token = generateRestrictionToken();
     const reference = 'RV-' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 10).toUpperCase();
-    restrictionTokens.set(token, { userId, reference, createdAt: Date.now() });
+    restrictionTokens.set(token, { userId, reference, createdAt: now });
     return { token, reference };
 }
 
@@ -207,6 +213,34 @@ function buildAppealOTPEmailHTML(code, username) {
 </table>
 </body>
 </html>`;
+}
+
+function buildRestrictionConfig() {
+    return {
+        brand: {
+            name: process.env.RESTRICTION_BRAND_NAME || 'Hassani GPT',
+            logo: process.env.RESTRICTION_BRAND_LOGO || '/1234.png'
+        },
+        captcha: {
+            siteKey: process.env.HCAPTCHA_SITE_KEY || 'ea14e556-79e8-46a4-a59e-21d8653267be',
+            enabled: !!process.env.HCAPTCHA_SECRET_KEY
+        },
+        features: {
+            appealEnabled: process.env.RESTRICTION_APPEAL_ENABLED !== '0',
+            cameraEnabled: process.env.RESTRICTION_CAMERA_ENABLED !== '0',
+            heartbeatMs: Number(process.env.RESTRICTION_HEARTBEAT_MS || 25000),
+            telemetryEnabled: process.env.RESTRICTION_TELEMETRY_ENABLED !== '0'
+        },
+        links: {
+            help: process.env.RESTRICTION_LINK_HELP || '/help.html',
+            terms: process.env.RESTRICTION_LINK_TERMS || '/terms.html',
+            privacy: process.env.RESTRICTION_LINK_PRIVACY || '/privacy.html',
+            about: process.env.RESTRICTION_LINK_ABOUT || '/about.html',
+            login: process.env.RESTRICTION_LINK_LOGIN || '/login.html',
+            home: process.env.RESTRICTION_LINK_HOME || '/messenger1.html'
+        },
+        serverTime: new Date().toISOString()
+    };
 }
 
 function buildMissingBuildHtml() {
@@ -377,13 +411,47 @@ function mountRestrictionRoutes(app, deps) {
     const distDir = deps.distDir || process.env.RESTRICTION_DIST_DIR || path.join(__dirname, 'restriction-vue', 'dist');
     const distIndex = path.join(distDir, 'index.html');
 
-    function sendRestrictionPage(req, res) {
+    async function buildBootPayload(req, tokenOverride) {
+        let token = tokenOverride || null;
+        let entry = token ? readTokenEntry(token) : null;
+        let userId = entry ? entry.userId : resolveUserId(req, persistentSessions);
+        if (!userId) return null;
+        const profile = await fetchRestrictionProfile(pool, userId);
+        if (!profile || profile.restricted !== true) return null;
+        if (!entry) {
+            const issued = issueRestrictionToken(userId);
+            token = issued.token;
+            profile.reference = issued.reference;
+        } else {
+            profile.reference = entry.reference;
+        }
+        return {
+            v: 2,
+            restricted: true,
+            token,
+            url: '/restriction.html/' + token,
+            cfg: buildRestrictionConfig(),
+            profile
+        };
+    }
+
+    async function sendRestrictionPage(req, res, tokenOverride) {
         res.set('Cache-Control', 'no-store, must-revalidate');
         res.set('X-Content-Type-Options', 'nosniff');
         res.set('X-Frame-Options', 'DENY');
         res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        if (fs.existsSync(distIndex)) return res.sendFile(distIndex);
-        return res.status(503).send(buildMissingBuildHtml());
+        if (!fs.existsSync(distIndex)) return res.status(503).send(buildMissingBuildHtml());
+        let html = fs.readFileSync(distIndex, 'utf8');
+        try {
+            const boot = await buildBootPayload(req, tokenOverride);
+            if (boot) {
+                const json = JSON.stringify(boot).replace(/</g, '\\u003c');
+                const tag = '<script>window.__RESTRICTION_BOOT__=' + json + '</script>';
+                if (html.indexOf('</head>') !== -1) html = html.replace('</head>', tag + '</head>');
+                else html = tag + html;
+            }
+        } catch (err) {}
+        return res.type('html').send(html);
     }
 
     app.get('/api/restriction/status', async (req, res) => {
@@ -391,40 +459,39 @@ function mountRestrictionRoutes(app, deps) {
             const userId = resolveUserId(req, persistentSessions);
             if (!userId) return res.json({ success: true, restricted: false });
 
-            const result = await pool.query(
-                'SELECT restriction, restriction_reason, restriction_date, appeal_status, appeal_date FROM users WHERE id = $1',
-                [userId]
-            );
-            if (result.rows.length === 0) return res.json({ success: true, restricted: false });
+            const profile = await fetchRestrictionProfile(pool, userId);
+            if (!profile) return res.json({ success: true, restricted: false });
 
-            const user = result.rows[0];
-            let username = null;
-            let displayName = null;
-            let avatar = null;
-            try {
-                const extra = await pool.query('SELECT username, display_name, avatar FROM users WHERE id = $1', [userId]);
-                if (extra.rows.length > 0) {
-                    username = extra.rows[0].username || null;
-                    displayName = extra.rows[0].display_name || null;
-                    avatar = extra.rows[0].avatar || null;
-                }
-            } catch (_) {
-                try {
-                    const extra = await pool.query('SELECT username FROM users WHERE id = $1', [userId]);
-                    if (extra.rows.length > 0) username = extra.rows[0].username || null;
-                } catch (__) {}
+            if (profile.restricted === true) {
+                const { token, reference } = issueRestrictionToken(userId);
+                profile.reference = reference;
+                return res.json({
+                    success: true,
+                    restricted: true,
+                    reason: profile.reason,
+                    restrictedAt: profile.restrictedAt,
+                    appealStatus: profile.appealStatus,
+                    appealDate: profile.appealDate,
+                    username: profile.username,
+                    displayName: profile.displayName,
+                    avatar: profile.avatar,
+                    token,
+                    reference,
+                    url: '/restriction.html/' + token,
+                    profile
+                });
             }
 
             res.json({
                 success: true,
-                restricted: user.restriction === true,
-                reason: user.restriction_reason || null,
-                restrictedAt: user.restriction_date || null,
-                appealStatus: user.appeal_status || 'none',
-                appealDate: user.appeal_date || null,
-                username,
-                displayName,
-                avatar
+                restricted: false,
+                reason: null,
+                restrictedAt: null,
+                appealStatus: profile.appealStatus,
+                appealDate: profile.appealDate,
+                username: profile.username,
+                displayName: profile.displayName,
+                avatar: profile.avatar
             });
         } catch (err) {
             console.error('[restriction/status] error:', err.message);
@@ -461,7 +528,9 @@ function mountRestrictionRoutes(app, deps) {
             }
             const { token, reference } = issueRestrictionToken(userId);
             auditLog && auditLog('RESTRICTION_TOKEN_ISSUED', { userId, ip: getIP ? getIP(req) : req.ip, details: { reference } });
-            res.json({ success: true, token, reference, url: '/restriction.html/' + token });
+            const profile = await fetchRestrictionProfile(pool, userId);
+            if (profile) profile.reference = reference;
+            res.json({ success: true, token, reference, url: '/restriction.html/' + token, profile: profile || null });
         } catch (err) {
             console.error('[restriction/token] error:', err.message);
             res.status(500).json({ success: false, error: 'SERVER_ERROR' });
@@ -470,32 +539,8 @@ function mountRestrictionRoutes(app, deps) {
 
     app.get('/api/restriction/bootstrap', (req, res) => {
         res.set('Cache-Control', 'public, max-age=60');
-        res.json({
-            success: true,
-            brand: {
-                name: process.env.RESTRICTION_BRAND_NAME || 'Hassani GPT',
-                logo: process.env.RESTRICTION_BRAND_LOGO || '/1234.png'
-            },
-            captcha: {
-                siteKey: process.env.HCAPTCHA_SITE_KEY || 'ea14e556-79e8-46a4-a59e-21d8653267be',
-                enabled: !!process.env.HCAPTCHA_SECRET_KEY
-            },
-            features: {
-                appealEnabled: process.env.RESTRICTION_APPEAL_ENABLED !== '0',
-                cameraEnabled: process.env.RESTRICTION_CAMERA_ENABLED !== '0',
-                heartbeatMs: Number(process.env.RESTRICTION_HEARTBEAT_MS || 25000),
-                telemetryEnabled: process.env.RESTRICTION_TELEMETRY_ENABLED !== '0'
-            },
-            links: {
-                help: process.env.RESTRICTION_LINK_HELP || '/help.html',
-                terms: process.env.RESTRICTION_LINK_TERMS || '/terms.html',
-                privacy: process.env.RESTRICTION_LINK_PRIVACY || '/privacy.html',
-                about: process.env.RESTRICTION_LINK_ABOUT || '/about.html',
-                login: process.env.RESTRICTION_LINK_LOGIN || '/login.html',
-                home: process.env.RESTRICTION_LINK_HOME || '/messenger1.html'
-            },
-            serverTime: new Date().toISOString()
-        });
+        const cfg = buildRestrictionConfig();
+        res.json({ success: true, ...cfg });
     });
 
     app.get('/api/restriction/i18n/:locale', (req, res) => {
@@ -896,12 +941,14 @@ function mountRestrictionRoutes(app, deps) {
         }));
     }
 
-    app.get(['/restriction.html', '/restriction.html/'], sendRestrictionPage);
+    app.get(['/restriction.html', '/restriction.html/'], (req, res) => {
+        sendRestrictionPage(req, res, null);
+    });
     app.get('/restriction.html/:token', (req, res) => {
         if (!TOKEN_PATTERN.test(req.params.token)) {
             return res.redirect(302, '/restriction.html');
         }
-        sendRestrictionPage(req, res);
+        sendRestrictionPage(req, res, req.params.token);
     });
 
     console.log(' [restriction] mounted: /status, /session/:token, /token, /bootstrap, /i18n/:locale, /heartbeat, /telemetry, /appeal/*, /admin/*, /restriction.html/:token, /restriction-assets/*');
