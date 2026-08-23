@@ -1,0 +1,1 @@
+import{j as u,w as f}from"./vendor-vue-BTya9Bgm.js";function p(n){const o=()=>{try{const c=typeof n=="function"?n():String(n||"");c&&(document.title=c)}catch{}};return u(o),typeof n=="function"&&f(n,o),{apply:o}}export{p as u};

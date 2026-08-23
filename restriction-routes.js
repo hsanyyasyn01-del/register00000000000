@@ -1,22 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════════════
-//  RESTRICTION MODULE — نظام تقييد الحسابات (مثل Instagram)
-// ═══════════════════════════════════════════════════════════════════════════
-//
-// المسارات:
-//   GET  /api/restriction/status            → فحص حالة التقييد
-//   POST /api/restriction/appeal/verify-captcha  → الخطوة 1: hCaptcha
-//   POST /api/restriction/appeal/send-otp        → الخطوة 2: إرسال OTP للبريد
-//   POST /api/restriction/appeal/verify-otp       → الخطوة 3: التحقق من OTP
-//   POST /api/restriction/appeal/upload-photo     → الخطوة 4: رفع صورة السيلفي
-//   GET  /api/restriction/appeal/status           → حالة الطعن الحالية
-//   POST /api/restriction/logout                  → تسجيل خروج من حساب مقيّد
-//   POST /api/restriction/admin/set               → (أدمن) تفعيل/إلغاء التقييد
-//
-// متغيرات البيئة المطلوبة:
-//   RESTRICTION_ADMIN_SECRET = كلمة سر سرية للأدمن (مطلوب)
-//   HCAPTCHA_SECRET_KEY      = مفتاح hCaptcha (موجود بالفعل)
-// ═══════════════════════════════════════════════════════════════════════════
-
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
@@ -25,16 +6,17 @@ let bcrypt;
 try { bcrypt = require('bcryptjs'); } catch (e) { bcrypt = require('bcrypt'); }
 const jwt = require('jsonwebtoken');
 
-//  خدمة البريد المركزية — مستقلة تماماً
-const emailService = require('./email-service');
+let expressStatic = null;
+try { expressStatic = require('express').static; } catch (e) { expressStatic = null; }
 
-//  مجلد رفع صور الطعون
+let emailService;
+try { emailService = require('./email-service'); } catch (e) { emailService = { send: async () => false }; }
+
 const appealPhotoDir = path.join(__dirname, 'uploads', 'appeals');
 if (!fs.existsSync(appealPhotoDir)) {
     fs.mkdirSync(appealPhotoDir, { recursive: true });
 }
 
-//  Multer لرفع صورة السيلفي
 const appealPhotoStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, appealPhotoDir),
     filename: (req, file, cb) => {
@@ -44,14 +26,13 @@ const appealPhotoStorage = multer.diskStorage({
 });
 const appealPhotoUpload = multer({
     storage: appealPhotoStorage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         if (file.mimetype.startsWith('image/')) cb(null, true);
         else cb(new Error('NOT_IMAGE'));
     }
 });
 
-//  تخزين مؤقت لـ appeal sessions
 const appealSessions = new Map();
 setInterval(() => {
     const now = Date.now();
@@ -60,7 +41,6 @@ setInterval(() => {
     }
 }, 5 * 60 * 1000);
 
-//  تنظيف صور الطعون بعد 12 ساعة
 setInterval(() => {
     try {
         const files = fs.readdirSync(appealPhotoDir);
@@ -68,21 +48,138 @@ setInterval(() => {
         files.forEach(file => {
             const filePath = path.join(appealPhotoDir, file);
             const stats = fs.statSync(filePath);
-            if (now - stats.mtimeMs > 12 * 60 * 60 * 1000) { // 12 ساعة
+            if (now - stats.mtimeMs > 12 * 60 * 60 * 1000) {
                 fs.unlink(filePath, () => {});
-                console.log(` [restriction] حذف صورة طعن قديمة: ${file}`);
+                console.log(' [restriction] purged old appeal photo: ' + file);
             }
         });
     } catch (e) {}
-}, 60 * 60 * 1000); // كل ساعة
+}, 60 * 60 * 1000);
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  قالب بريد OTP للطعن
-// ═══════════════════════════════════════════════════════════════════════════
+const restrictionTokens = new Map();
+const RESTRICTION_TOKEN_TTL = Number(process.env.RESTRICTION_TOKEN_TTL_MS || 6 * 60 * 60 * 1000);
+setInterval(() => {
+    const now = Date.now();
+    for (const [token, entry] of restrictionTokens.entries()) {
+        if (now - entry.createdAt > RESTRICTION_TOKEN_TTL) restrictionTokens.delete(token);
+    }
+}, 10 * 60 * 1000);
+
+const telemetryRate = new Map();
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, rec] of telemetryRate.entries()) {
+        if (now > rec.reset + 10 * 60 * 1000) telemetryRate.delete(ip);
+    }
+}, 5 * 60 * 1000);
+
+const TOKEN_PATTERN = /^[0-9a-z]{40,220}$/;
+
+function generateRestrictionToken() {
+    const alphabet = '0123456789abcdefghjkmnpqrstuvwxyz';
+    const bytes = crypto.randomBytes(160);
+    let out = '';
+    for (let i = 0; i < bytes.length; i++) out += alphabet[bytes[i] % alphabet.length];
+    const digits = String(crypto.randomInt(100000000, 999999999)) + String(crypto.randomInt(100000000, 999999999));
+    const merged = (digits + out.slice(0, 170)).split('');
+    for (let i = merged.length - 1; i > 0; i--) {
+        const j = crypto.randomInt(0, i + 1);
+        const tmp = merged[i];
+        merged[i] = merged[j];
+        merged[j] = tmp;
+    }
+    return merged.join('');
+}
+
+function issueRestrictionToken(userId) {
+    const token = generateRestrictionToken();
+    const reference = 'RV-' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 10).toUpperCase();
+    restrictionTokens.set(token, { userId, reference, createdAt: Date.now() });
+    return { token, reference };
+}
+
+function readTokenEntry(token) {
+    if (!TOKEN_PATTERN.test(token)) return null;
+    const entry = restrictionTokens.get(token);
+    if (!entry) return null;
+    if (Date.now() - entry.createdAt > RESTRICTION_TOKEN_TTL) {
+        restrictionTokens.delete(token);
+        return null;
+    }
+    return entry;
+}
+
+function resolveUserId(req, persistentSessions) {
+    let userId = null;
+    let token = req.headers.authorization;
+    if (token && token.startsWith('Bearer ')) token = token.split(' ')[1];
+    else token = req.headers['x-session-token'];
+    if (!token && req.headers.cookie) {
+        const m = req.headers.cookie.match(/(?:^|;\s*)sessionToken=([^;]+)/);
+        if (m) token = m[1];
+    }
+    if (req.session && req.session.userId) userId = req.session.userId;
+    if (token && !userId) {
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback');
+            if (decoded && decoded.userId) userId = decoded.userId;
+        } catch (_) {}
+        if (!userId && persistentSessions && persistentSessions[token]) {
+            userId = persistentSessions[token].userId;
+        }
+    }
+    return userId;
+}
+
+async function fetchRestrictionProfile(pool, userId) {
+    const wideSql = 'SELECT username, display_name, avatar, restriction, restriction_reason, restriction_date, appeal_status, appeal_date, appeal_photo_expires_at FROM users WHERE id = $1';
+    const narrowSql = 'SELECT username, restriction, restriction_reason, restriction_date, appeal_status, appeal_date FROM users WHERE id = $1';
+    let rows = null;
+    try {
+        rows = (await pool.query(wideSql, [userId])).rows;
+    } catch (e) {
+        rows = (await pool.query(narrowSql, [userId])).rows;
+    }
+    if (!rows || rows.length === 0) return null;
+    const u = rows[0];
+    return {
+        username: u.username || null,
+        displayName: typeof u.display_name !== 'undefined' ? u.display_name : null,
+        avatar: typeof u.avatar !== 'undefined' ? u.avatar : null,
+        restricted: u.restriction === true,
+        restrictedAt: u.restriction_date || null,
+        reason: u.restriction_reason || null,
+        appealStatus: u.appeal_status || 'none',
+        appealDate: u.appeal_date || null,
+        photoExpiresAt: typeof u.appeal_photo_expires_at !== 'undefined' ? u.appeal_photo_expires_at : null
+    };
+}
+
+async function defaultHcaptchaVerifier(captchaToken, secret) {
+    const verifyRes = await fetch('https://api.hcaptcha.com/siteverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `response=${encodeURIComponent(captchaToken)}&secret=${encodeURIComponent(secret)}`
+    });
+    return verifyRes.json();
+}
+
+function sanitizeTelemetryPayload(payload) {
+    if (!payload || typeof payload !== 'object') return null;
+    const out = {};
+    const keys = Object.keys(payload).slice(0, 25);
+    for (const k of keys) {
+        const v = payload[k];
+        if (typeof v === 'string') out[k] = v.slice(0, 300);
+        else if (typeof v === 'number' || typeof v === 'boolean' || v === null) out[k] = v;
+    }
+    return out;
+}
+
 function buildAppealOTPEmailHTML(code, username) {
     return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
-<head><meta charset="UTF-8"><title>رمز الطعن - Hassani GPT</title>
+<head><meta charset="UTF-8"><title>Hassani GPT</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
 </head>
 <body style="margin:0;padding:0;background:#0d1117;font-family:'Cairo',sans-serif;color:#f0f6fc;">
@@ -112,33 +209,186 @@ function buildAppealOTPEmailHTML(code, username) {
 </html>`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  الدالة الرئيسية
-// ═══════════════════════════════════════════════════════════════════════════
-function mountRestrictionRoutes(app, deps) {
-    const { pool, nodemailer, persistentSessions, savePersistentSessions, auditLog, getIP, PUBLIC_URL } = deps;
+function buildMissingBuildHtml() {
+    return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Hassani GPT</title></head>
+<body style="margin:0;background:#000;color:#f5f5f5;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">
+<div style="text-align:center;max-width:420px;padding:24px;">
+<h1 style="font-size:18px;margin:0 0 12px;">واجهة التقييد غير مثبتة</h1>
+<p style="font-size:13px;color:#a8a8a8;line-height:1.7;margin:0;">لم يتم العثور على ملفات الواجهة المبنية داخل restriction-vue/dist. ابنِ الواجهة أولاً عبر npm run build ثم أعد تشغيل الخادم.</p>
+</div>
+</body>
+</html>`;
+}
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 0) GET /api/restriction/status — فحص حالة التقييد
-    // ═══════════════════════════════════════════════════════════════════════
+const I18N_AR = {
+    appTitle: 'تنبيه حول الحساب',
+    brand: 'Hassani GPT',
+    accountCenter: 'مركز الحساب',
+    restrictedTitle: 'لقد قيدنا حسابك',
+    restrictedOn: 'في {date}',
+    restrictedBody: 'لا يلتزم حسابك بإرشادات المجتمع الخاصة بنا. لن يتمكن الآخرون من رؤية حسابك أو التفاعل معه حتى تكتمل المراجعة.',
+    whyTitle: 'لماذا حدث هذا',
+    defaultReason: 'مخالفة شروط الاستخدام',
+    detailDate: 'تاريخ التقييد',
+    detailStatus: 'الحالة',
+    detailReference: 'المرجع',
+    statusRestricted: 'مقيد',
+    statusAppealPending: 'الاعتراض قيد المراجعة',
+    statusAppealNone: 'لم يتم تقديم اعتراض',
+    appealCta: 'الاعتراض على القرار',
+    logoutCta: 'تسجيل الخروج',
+    deadlineNote: 'إذا كنت تعتقد أننا ارتكبنا خطأ، يمكنك الاعتراض على القرار خلال 180 يوماً من تاريخ التقييد، وإلا فقد يتم تعطيل حسابك نهائياً.',
+    stepIdentity: 'تأكيد هويتك',
+    stepIdentityBody: 'للحفاظ على أمان حسابك، يجب إكمال تحقق أمني سريع قبل تقديم الاعتراض.',
+    stepOtpTitle: 'أدخل رمز التأكيد',
+    stepOtpBody: 'أدخل اسم المستخدم الخاص بك وسنرسل رمزاً مكوناً من 6 أرقام إلى البريد الإلكتروني المرتبط بحسابك.',
+    stepOtpSent: 'أدخل الرمز المكون من 6 أرقام الذي أرسلناه إليك.',
+    usernamePlaceholder: 'اسم المستخدم',
+    sendCode: 'إرسال الرمز',
+    sendingCode: 'جاري الإرسال...',
+    confirm: 'تأكيد',
+    confirming: 'جاري التأكيد...',
+    continue: 'متابعة',
+    verifying: 'جاري التحقق...',
+    back: 'رجوع',
+    resendCode: 'إعادة إرسال الرمز',
+    resendIn: 'إعادة الإرسال بعد {s} ث',
+    stepSelfieTitle: 'التحقق بالصورة',
+    stepSelfieBody: 'التقط صورة واضحة لوجهك لتأكيد هويتك. تُستخدم الصورة للمراجعة فقط وتحذف تلقائياً.',
+    capture: 'التقاط',
+    retake: 'إعادة الالتقاط',
+    submitReview: 'إرسال للمراجعة',
+    submitting: 'جاري الإرسال...',
+    cameraError: 'تعذر الوصول للكاميرا',
+    cameraRetry: 'إعادة المحاولة',
+    cameraWaiting: 'جاري تشغيل الكاميرا...',
+    submittedBadge: 'تم الاستلام',
+    submittedTitle: 'تلقينا اعتراضك',
+    submittedBody: 'تستغرق المراجعة عادةً أقل من 24 ساعة. سنعلمك بالقرار فور اتخاذه عبر بريدك الإلكتروني.',
+    submittedDate: 'تاريخ الاعتراض',
+    submittedStatus: 'الحالة',
+    submittedStatusValue: 'قيد المراجعة',
+    submittedPurge: 'حذف الصورة',
+    privacyNote: 'ستحذف صورتك نهائياً من أنظمتنا بعد اكتمال المراجعة ولن تكون مرئية لأي شخص.',
+    footerHelp: 'مركز المساعدة',
+    footerTerms: 'الشروط',
+    footerPrivacy: 'الخصوصية',
+    footerAbout: 'حول',
+    footerCopyright: '© 2026 Hassani GPT',
+    offline: 'لا يوجد اتصال بالإنترنت. سنحاول مجدداً تلقائياً.',
+    sessionExpiredTitle: 'انتهت صلاحية الجلسة',
+    sessionExpiredBody: 'لم نتمكن من التحقق من هذه الصفحة. سجل الدخول مجدداً لمتابعة حالة حسابك.',
+    loginCta: 'تسجيل الدخول',
+    retryCta: 'إعادة المحاولة',
+    genericError: 'حدث خطأ ما. حاول مجدداً.',
+    toastCaptchaRequired: 'يرجى إكمال التحقق البشري',
+    toastCaptchaFailed: 'فشل التحقق البشري',
+    toastUsernameRequired: 'يرجى إدخال اسم المستخدم',
+    toastCodeSent: 'تم إرسال الرمز بنجاح',
+    toastCodeWrong: 'الرمز غير صحيح',
+    toastCodeIncomplete: 'أدخل الرمز كاملاً',
+    toastPhotoRequired: 'التقط صورة أولاً',
+    toastNetwork: 'خطأ في الاتصال بالخادم',
+    toastLoggedOut: 'تم تسجيل الخروج',
+    stepOf: 'الخطوة {current} من {total}'
+};
+
+const I18N_EN = {
+    appTitle: 'Account notice',
+    brand: 'Hassani GPT',
+    accountCenter: 'Account center',
+    restrictedTitle: 'We restricted your account',
+    restrictedOn: 'on {date}',
+    restrictedBody: 'Your account does not follow our Community Guidelines. Other people cannot see or interact with your account until the review is complete.',
+    whyTitle: 'Why this happened',
+    defaultReason: 'Violation of the terms of use',
+    detailDate: 'Restriction date',
+    detailStatus: 'Status',
+    detailReference: 'Reference',
+    statusRestricted: 'Restricted',
+    statusAppealPending: 'Appeal under review',
+    statusAppealNone: 'No appeal submitted',
+    appealCta: 'Disagree with decision',
+    logoutCta: 'Log out',
+    deadlineNote: 'If you think we made a mistake, you can disagree with the decision within 180 days of the restriction date, otherwise your account may be permanently disabled.',
+    stepIdentity: 'Confirm your identity',
+    stepIdentityBody: 'To keep your account secure, complete a quick security check before submitting an appeal.',
+    stepOtpTitle: 'Enter confirmation code',
+    stepOtpBody: 'Enter your username and we will send a 6-digit code to the email address linked to your account.',
+    stepOtpSent: 'Enter the 6-digit code we sent you.',
+    usernamePlaceholder: 'Username',
+    sendCode: 'Send code',
+    sendingCode: 'Sending...',
+    confirm: 'Confirm',
+    confirming: 'Confirming...',
+    continue: 'Continue',
+    verifying: 'Verifying...',
+    back: 'Back',
+    resendCode: 'Resend code',
+    resendIn: 'Resend in {s}s',
+    stepSelfieTitle: 'Photo verification',
+    stepSelfieBody: 'Take a clear photo of your face to confirm your identity. The photo is only used for review and is deleted automatically.',
+    capture: 'Capture',
+    retake: 'Retake',
+    submitReview: 'Submit for review',
+    submitting: 'Submitting...',
+    cameraError: 'Camera unavailable',
+    cameraRetry: 'Try again',
+    cameraWaiting: 'Starting camera...',
+    submittedBadge: 'Received',
+    submittedTitle: 'We received your appeal',
+    submittedBody: 'Reviews usually take less than 24 hours. We will notify you of the decision by email as soon as it is made.',
+    submittedDate: 'Appeal date',
+    submittedStatus: 'Status',
+    submittedStatusValue: 'Under review',
+    submittedPurge: 'Photo deletion',
+    privacyNote: 'Your photo will be permanently deleted from our systems after the review is complete and will not be visible to anyone.',
+    footerHelp: 'Help center',
+    footerTerms: 'Terms',
+    footerPrivacy: 'Privacy',
+    footerAbout: 'About',
+    footerCopyright: '© 2026 Hassani GPT',
+    offline: 'No internet connection. We will retry automatically.',
+    sessionExpiredTitle: 'Session expired',
+    sessionExpiredBody: 'We could not verify this page. Log in again to continue reviewing your account status.',
+    loginCta: 'Log in',
+    retryCta: 'Try again',
+    genericError: 'Something went wrong. Try again.',
+    toastCaptchaRequired: 'Please complete the human verification',
+    toastCaptchaFailed: 'Human verification failed',
+    toastUsernameRequired: 'Please enter your username',
+    toastCodeSent: 'Code sent successfully',
+    toastCodeWrong: 'Incorrect code',
+    toastCodeIncomplete: 'Enter the full code',
+    toastPhotoRequired: 'Take a photo first',
+    toastNetwork: 'Network error',
+    toastLoggedOut: 'Logged out',
+    stepOf: 'Step {current} of {total}'
+};
+
+const RESTRICTION_I18N = { ar: I18N_AR, en: I18N_EN };
+
+function mountRestrictionRoutes(app, deps) {
+    const { pool, persistentSessions, savePersistentSessions, auditLog, getIP } = deps;
+    const mailer = deps.emailService || emailService;
+    const hcaptchaVerifier = deps.hcaptchaVerifier || defaultHcaptchaVerifier;
+    const distDir = deps.distDir || process.env.RESTRICTION_DIST_DIR || path.join(__dirname, 'restriction-vue', 'dist');
+    const distIndex = path.join(distDir, 'index.html');
+
+    function sendRestrictionPage(req, res) {
+        res.set('Cache-Control', 'no-store, must-revalidate');
+        res.set('X-Content-Type-Options', 'nosniff');
+        res.set('X-Frame-Options', 'DENY');
+        res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+        if (fs.existsSync(distIndex)) return res.sendFile(distIndex);
+        return res.status(503).send(buildMissingBuildHtml());
+    }
+
     app.get('/api/restriction/status', async (req, res) => {
         try {
-            let userId = null;
-            let token = req.headers.authorization;
-            if (token && token.startsWith('Bearer ')) token = token.split(' ')[1];
-            else token = req.headers['x-session-token'];
-
-            if (token) {
-                try {
-                    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback');
-                    if (decoded && decoded.userId) userId = decoded.userId;
-                } catch (_) {}
-                if (!userId && persistentSessions && persistentSessions[token]) {
-                    userId = persistentSessions[token].userId;
-                }
-            }
-            if (req.session && req.session.userId) userId = req.session.userId;
-
+            const userId = resolveUserId(req, persistentSessions);
             if (!userId) return res.json({ success: true, restricted: false });
 
             const result = await pool.query(
@@ -148,13 +398,33 @@ function mountRestrictionRoutes(app, deps) {
             if (result.rows.length === 0) return res.json({ success: true, restricted: false });
 
             const user = result.rows[0];
+            let username = null;
+            let displayName = null;
+            let avatar = null;
+            try {
+                const extra = await pool.query('SELECT username, display_name, avatar FROM users WHERE id = $1', [userId]);
+                if (extra.rows.length > 0) {
+                    username = extra.rows[0].username || null;
+                    displayName = extra.rows[0].display_name || null;
+                    avatar = extra.rows[0].avatar || null;
+                }
+            } catch (_) {
+                try {
+                    const extra = await pool.query('SELECT username FROM users WHERE id = $1', [userId]);
+                    if (extra.rows.length > 0) username = extra.rows[0].username || null;
+                } catch (__) {}
+            }
+
             res.json({
                 success: true,
                 restricted: user.restriction === true,
                 reason: user.restriction_reason || null,
                 restrictedAt: user.restriction_date || null,
                 appealStatus: user.appeal_status || 'none',
-                appealDate: user.appeal_date || null
+                appealDate: user.appeal_date || null,
+                username,
+                displayName,
+                avatar
             });
         } catch (err) {
             console.error('[restriction/status] error:', err.message);
@@ -162,9 +432,117 @@ function mountRestrictionRoutes(app, deps) {
         }
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 1) POST /api/restriction/appeal/verify-captcha — الخطوة 1: hCaptcha
-    // ═══════════════════════════════════════════════════════════════════════
+    app.get('/api/restriction/session/:token', async (req, res) => {
+        try {
+            const entry = readTokenEntry(req.params.token);
+            if (!entry) {
+                return res.status(404).json({ success: false, error: 'SESSION_EXPIRED' });
+            }
+            const profile = await fetchRestrictionProfile(pool, entry.userId);
+            if (!profile) {
+                return res.status(404).json({ success: false, error: 'SESSION_EXPIRED' });
+            }
+            profile.reference = entry.reference;
+            res.set('Cache-Control', 'no-store');
+            res.json({ success: true, restricted: profile.restricted === true, profile });
+        } catch (err) {
+            console.error('[restriction/session] error:', err.message);
+            res.status(500).json({ success: false, error: 'SERVER_ERROR' });
+        }
+    });
+
+    app.post('/api/restriction/token', async (req, res) => {
+        try {
+            const userId = resolveUserId(req, persistentSessions);
+            if (!userId) return res.status(401).json({ success: false, error: 'NOT_AUTHENTICATED' });
+            const result = await pool.query('SELECT restriction FROM users WHERE id = $1', [userId]);
+            if (result.rows.length === 0 || result.rows[0].restriction !== true) {
+                return res.status(403).json({ success: false, error: 'NOT_RESTRICTED' });
+            }
+            const { token, reference } = issueRestrictionToken(userId);
+            auditLog && auditLog('RESTRICTION_TOKEN_ISSUED', { userId, ip: getIP ? getIP(req) : req.ip, details: { reference } });
+            res.json({ success: true, token, reference, url: '/restriction.html/' + token });
+        } catch (err) {
+            console.error('[restriction/token] error:', err.message);
+            res.status(500).json({ success: false, error: 'SERVER_ERROR' });
+        }
+    });
+
+    app.get('/api/restriction/bootstrap', (req, res) => {
+        res.set('Cache-Control', 'public, max-age=60');
+        res.json({
+            success: true,
+            brand: {
+                name: process.env.RESTRICTION_BRAND_NAME || 'Hassani GPT',
+                logo: process.env.RESTRICTION_BRAND_LOGO || '/1234.png'
+            },
+            captcha: {
+                siteKey: process.env.HCAPTCHA_SITE_KEY || 'ea14e556-79e8-46a4-a59e-21d8653267be',
+                enabled: !!process.env.HCAPTCHA_SECRET_KEY
+            },
+            features: {
+                appealEnabled: process.env.RESTRICTION_APPEAL_ENABLED !== '0',
+                cameraEnabled: process.env.RESTRICTION_CAMERA_ENABLED !== '0',
+                heartbeatMs: Number(process.env.RESTRICTION_HEARTBEAT_MS || 25000),
+                telemetryEnabled: process.env.RESTRICTION_TELEMETRY_ENABLED !== '0'
+            },
+            links: {
+                help: process.env.RESTRICTION_LINK_HELP || '/help.html',
+                terms: process.env.RESTRICTION_LINK_TERMS || '/terms.html',
+                privacy: process.env.RESTRICTION_LINK_PRIVACY || '/privacy.html',
+                about: process.env.RESTRICTION_LINK_ABOUT || '/about.html',
+                login: process.env.RESTRICTION_LINK_LOGIN || '/login.html',
+                home: process.env.RESTRICTION_LINK_HOME || '/messenger1.html'
+            },
+            serverTime: new Date().toISOString()
+        });
+    });
+
+    app.get('/api/restriction/i18n/:locale', (req, res) => {
+        const locale = RESTRICTION_I18N[req.params.locale] ? req.params.locale : 'ar';
+        res.set('Cache-Control', 'public, max-age=300');
+        res.json({
+            success: true,
+            locale,
+            dir: locale === 'ar' ? 'rtl' : 'ltr',
+            messages: RESTRICTION_I18N[locale]
+        });
+    });
+
+    app.get('/api/restriction/heartbeat', (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        res.json({ success: true, ok: true, serverTime: new Date().toISOString(), uptime: Math.round(process.uptime()) });
+    });
+
+    app.post('/api/restriction/telemetry', (req, res) => {
+        try {
+            const ip = getIP ? getIP(req) : (req.ip || 'unknown');
+            const now = Date.now();
+            let rec = telemetryRate.get(ip);
+            if (!rec || now > rec.reset) rec = { count: 0, reset: now + 60000 };
+            rec.count += 1;
+            telemetryRate.set(ip, rec);
+            let body = req.body;
+            if (typeof body === 'string') {
+                try { body = JSON.parse(body); } catch (e) { body = null; }
+            }
+            if (rec.count > 240 || !body || !Array.isArray(body.events)) return res.status(204).end();
+            const events = body.events.slice(0, 50);
+            const significant = new Set(['restriction_page_view', 'restriction_error', 'restriction_appeal_submitted', 'restriction_session_invalid']);
+            for (const ev of events) {
+                const name = String((ev && ev.event) || '').slice(0, 60);
+                if (!name || !significant.has(name)) continue;
+                auditLog && auditLog('RESTRICTION_TELEMETRY', {
+                    ip,
+                    details: { event: name, payload: sanitizeTelemetryPayload(ev.payload) }
+                });
+            }
+            return res.status(204).end();
+        } catch (err) {
+            return res.status(204).end();
+        }
+    });
+
     app.post('/api/restriction/appeal/verify-captcha', async (req, res) => {
         try {
             const { captchaToken } = req.body;
@@ -173,12 +551,7 @@ function mountRestrictionRoutes(app, deps) {
             const HCAPTCHA_SECRET = process.env.HCAPTCHA_SECRET_KEY;
             if (!HCAPTCHA_SECRET) return res.status(500).json({ success: false, error: 'CAPTCHA غير مُعدّ' });
 
-            const verifyRes = await fetch('https://api.hcaptcha.com/siteverify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `response=${encodeURIComponent(captchaToken)}&secret=${encodeURIComponent(HCAPTCHA_SECRET)}`
-            });
-            const verifyData = await verifyRes.json();
+            const verifyData = await hcaptchaVerifier(captchaToken, HCAPTCHA_SECRET);
             if (!verifyData.success) return res.status(400).json({ success: false, error: 'فشل التحقق البشري' });
 
             const sessionToken = 'appeal_' + crypto.randomBytes(24).toString('hex');
@@ -195,33 +568,24 @@ function mountRestrictionRoutes(app, deps) {
         }
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 2) POST /api/restriction/appeal/send-otp — الخطوة 2: إرسال OTP للبريد
-    // ═══════════════════════════════════════════════════════════════════════
     app.post('/api/restriction/appeal/send-otp', async (req, res) => {
         try {
             const { sessionToken, username } = req.body;
-            console.log(` [restriction] send-otp بدأ — username: "${username}" | sessionToken: ${sessionToken ? 'موجود' : 'مفقود'}`);
+            console.log(' [restriction] send-otp start username="' + username + '" token=' + (sessionToken ? 'present' : 'missing'));
 
             if (!sessionToken || !username) return res.status(400).json({ success: false, error: 'بيانات ناقصة' });
 
             const session = appealSessions.get(sessionToken);
             if (!session || !session.captchaVerified) {
-                console.log(` [restriction] جلسة غير صالحة — session exists: ${!!session}`);
                 return res.status(400).json({ success: false, error: 'جلسة غير صالحة' });
             }
 
-            //  ابحث عن المستخدم بـ username فقط (بدون restriction = TRUE)
-            // المستخدم على صفحة الطعن أصلاً، فلا داعي للفحص مرة أخرى
             const userResult = await pool.query(
                 'SELECT id, username, email, email_verified, is_verified, restriction FROM users WHERE LOWER(username) = LOWER($1)',
                 [username.trim()]
             );
 
-            console.log(` [restriction] نتائج البحث: ${userResult.rows.length} مستخدم`);
-
             if (userResult.rows.length === 0) {
-                console.log(` [restriction]  username غير موجود: "${username}"`);
                 session.step = 'otp_fake';
                 session.fakeMode = true;
                 appealSessions.set(sessionToken, session);
@@ -229,11 +593,9 @@ function mountRestrictionRoutes(app, deps) {
             }
 
             const user = userResult.rows[0];
-            console.log(` [restriction]  مستخدم موجود: ${user.username} | بريد: ${user.email} | restriction: ${user.restriction} | email_verified: ${user.email_verified} | is_verified: ${user.is_verified}`);
 
             const hasEmail = user.email && user.email.trim().length > 0;
             if (!hasEmail) {
-                console.log(` [restriction]  لا يوجد بريد لهذا المستخدم`);
                 session.step = 'otp_fake';
                 session.fakeMode = true;
                 appealSessions.set(sessionToken, session);
@@ -252,16 +614,13 @@ function mountRestrictionRoutes(app, deps) {
             session.fakeMode = false;
             appealSessions.set(sessionToken, session);
 
-            console.log(` [restriction] مستخدم موجود: ${user.username} | بريد: ${user.email} | email_verified: ${user.email_verified} | is_verified: ${user.is_verified}`);
-
-            // أرسل البريد عبر خدمة البريد المركزية
             const html = buildAppealOTPEmailHTML(otpCode, user.username);
-            const subject = `رمز الطعن: ${otpCode} — Hassani GPT`;
-            const text = `رمز الطعن الخاص بك: ${otpCode}\n\nينتهي خلال 5 دقائق.`;
+            const subject = 'رمز الطعن: ' + otpCode;
+            const text = 'رمز الطعن الخاص بك: ' + otpCode + ' ينتهي خلال 5 دقائق.';
 
-            const sent = await emailService.send(user.email, subject, html, text);
+            const sent = await mailer.send(user.email, subject, html, text);
 
-            console.log(` [restriction] إرسال OTP طعن إلى ${user.email} — ${sent ? ' نجح' : ' فشل'}`);
+            console.log(' [restriction] appeal OTP to ' + user.email + ' ' + (sent ? 'sent' : 'failed'));
             res.json({ success: true, step: 'otp' });
         } catch (err) {
             console.error('[appeal/send-otp] error:', err.message);
@@ -269,9 +628,6 @@ function mountRestrictionRoutes(app, deps) {
         }
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 3) POST /api/restriction/appeal/verify-otp — الخطوة 3: التحقق من OTP
-    // ═══════════════════════════════════════════════════════════════════════
     app.post('/api/restriction/appeal/verify-otp', async (req, res) => {
         try {
             const { sessionToken, otp } = req.body;
@@ -290,7 +646,7 @@ function mountRestrictionRoutes(app, deps) {
             }
 
             const match = await bcrypt.compare(String(otp), session.otpHash);
-            if (!match) return res.status(400).json({ success: false, error: `رمز خاطئ (${5 - session.attempts} محاولات متبقية)` });
+            if (!match) return res.status(400).json({ success: false, error: 'رمز خاطئ (' + (5 - session.attempts) + ' محاولات متبقية)' });
 
             session.otpVerified = true;
             session.step = 'photo';
@@ -303,9 +659,6 @@ function mountRestrictionRoutes(app, deps) {
         }
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 4) POST /api/restriction/appeal/upload-photo — الخطوة 4: رفع صورة السيلفي
-    // ═══════════════════════════════════════════════════════════════════════
     app.post('/api/restriction/appeal/upload-photo', (req, res) => {
         const uploader = appealPhotoUpload.single('selfie');
         uploader(req, res, async (err) => {
@@ -323,9 +676,8 @@ function mountRestrictionRoutes(app, deps) {
                     return res.status(403).json({ success: false, error: 'يجب إكمال الخطوات السابقة' });
                 }
 
-                //  احفظ الطعن في DB
                 const now = new Date();
-                const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000); // 12 ساعة
+                const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
 
                 await pool.query(`
                     UPDATE users SET
@@ -342,9 +694,8 @@ function mountRestrictionRoutes(app, deps) {
                     details: { photo: req.file.filename }
                 });
 
-                console.log(` [restriction] تم تقديم طعن من ${session.username} — صورة: ${req.file.filename}`);
+                console.log(' [restriction] appeal submitted by ' + session.username + ' photo=' + req.file.filename);
 
-                // احذف الـ appeal session
                 appealSessions.delete(sessionToken);
 
                 res.json({
@@ -361,20 +712,9 @@ function mountRestrictionRoutes(app, deps) {
         });
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 5) GET /api/restriction/appeal/status — حالة الطعن
-    // ═══════════════════════════════════════════════════════════════════════
     app.get('/api/restriction/appeal/status', async (req, res) => {
         try {
-            let userId = null;
-            let token = req.headers.authorization;
-            if (token && token.startsWith('Bearer ')) token = token.split(' ')[1];
-            else token = req.headers['x-session-token'];
-            if (token) {
-                try { const d = jwt.verify(token, process.env.JWT_SECRET || 'fallback'); if (d) userId = d.userId; } catch (_) {}
-                if (!userId && persistentSessions && persistentSessions[token]) userId = persistentSessions[token].userId;
-            }
-            if (req.session && req.session.userId) userId = req.session.userId;
+            const userId = resolveUserId(req, persistentSessions);
             if (!userId) return res.json({ success: true, appealStatus: 'none' });
 
             const result = await pool.query(
@@ -396,9 +736,6 @@ function mountRestrictionRoutes(app, deps) {
         }
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 6) POST /api/restriction/logout — تسجيل خروج من حساب مقيّد
-    // ═══════════════════════════════════════════════════════════════════════
     app.post('/api/restriction/logout', (req, res) => {
         try {
             const token = req.headers.authorization;
@@ -418,10 +755,6 @@ function mountRestrictionRoutes(app, deps) {
         }
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 7) POST /api/restriction/admin/set — (أدمن) تفعيل/إلغاء التقييد
-    //    body: { adminSecret, userId, restricted, reason? }
-    // ═══════════════════════════════════════════════════════════════════════
     app.post('/api/restriction/admin/set', async (req, res) => {
         try {
             const { adminSecret, userId, restricted, reason } = req.body;
@@ -441,7 +774,6 @@ function mountRestrictionRoutes(app, deps) {
                     WHERE id = $2
                 `, [reason || 'مخالفة شروط الاستخدام', userId]);
 
-                //  طرد المستخدم من كل جلساته النشطة
                 if (persistentSessions) {
                     let kicked = 0;
                     for (const [token, session] of Object.entries(persistentSessions)) {
@@ -453,11 +785,11 @@ function mountRestrictionRoutes(app, deps) {
                     if (kicked > 0 && typeof savePersistentSessions === 'function') {
                         savePersistentSessions(persistentSessions);
                     }
-                    console.log(` [restriction] تم طرد ${kicked} جلسة للمستخدم ${userId}`);
+                    console.log(' [restriction] kicked ' + kicked + ' sessions for user ' + userId);
                 }
 
                 auditLog && auditLog('RESTRICTION_ACTIVATED', { userId, reason: reason || 'default', ip: getIP ? getIP(req) : req.ip });
-                console.log(` [restriction] تم تقييد المستخدم ${userId}: ${reason || 'default'}`);
+                console.log(' [restriction] user restricted ' + userId + ': ' + (reason || 'default'));
             } else {
                 await pool.query(`
                     UPDATE users SET
@@ -471,7 +803,7 @@ function mountRestrictionRoutes(app, deps) {
                 `, [userId]);
 
                 auditLog && auditLog('RESTRICTION_LIFTED', { userId, ip: getIP ? getIP(req) : req.ip });
-                console.log(` [restriction] تم رفع التقييد عن المستخدم ${userId}`);
+                console.log(' [restriction] restriction lifted for user ' + userId);
             }
 
             res.json({ success: true, userId, restricted });
@@ -481,9 +813,6 @@ function mountRestrictionRoutes(app, deps) {
         }
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 8) POST /api/restriction/admin/list — (أدمن) قائمة المستخدمين المقيّدين
-    // ═══════════════════════════════════════════════════════════════════════
     app.post('/api/restriction/admin/list', async (req, res) => {
         try {
             const { adminSecret } = req.body;
@@ -507,9 +836,6 @@ function mountRestrictionRoutes(app, deps) {
         }
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 9) POST /api/restriction/admin/list-all — (أدمن) قائمة كل المستخدمين
-    // ═══════════════════════════════════════════════════════════════════════
     app.post('/api/restriction/admin/list-all', async (req, res) => {
         try {
             const { adminSecret } = req.body;
@@ -535,9 +861,6 @@ function mountRestrictionRoutes(app, deps) {
         }
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 10) GET /api/restriction/admin/appeal-photo/:filename — (أدمن) عرض صورة طعن
-    // ═══════════════════════════════════════════════════════════════════════
     app.get('/api/restriction/admin/appeal-photo/:filename', async (req, res) => {
         try {
             const adminSecret = req.headers['x-admin-secret'] || req.query.secret;
@@ -561,12 +884,28 @@ function mountRestrictionRoutes(app, deps) {
         }
     });
 
-    console.log(' [restriction] تم تركيب المسارات: /status, /appeal/*, /admin/set, /admin/list, /admin/list-all, /admin/appeal-photo');
+    if (expressStatic) {
+        app.use('/restriction-assets', expressStatic(distDir, {
+            index: false,
+            fallthrough: true,
+            maxAge: '7d',
+            immutable: true,
+            setHeaders: (res) => {
+                res.setHeader('X-Content-Type-Options', 'nosniff');
+            }
+        }));
+    }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    //  Middleware: منع المستخدمين المقيّدين من الوصول للمنصة
-    // (معرّف داخل mountRestrictionRoutes ليمدّه بـ pool و persistentSessions)
-    // ═══════════════════════════════════════════════════════════════════════
+    app.get(['/restriction.html', '/restriction.html/'], sendRestrictionPage);
+    app.get('/restriction.html/:token', (req, res) => {
+        if (!TOKEN_PATTERN.test(req.params.token)) {
+            return res.redirect(302, '/restriction.html');
+        }
+        sendRestrictionPage(req, res);
+    });
+
+    console.log(' [restriction] mounted: /status, /session/:token, /token, /bootstrap, /i18n/:locale, /heartbeat, /telemetry, /appeal/*, /admin/*, /restriction.html/:token, /restriction-assets/*');
+
     return async function requireNotRestricted(req, res, next) {
         const PROTECTED_PAGES = new Set([
             '/messenger1.html', '/3251.html', '/edit-profile.html',
@@ -576,47 +915,25 @@ function mountRestrictionRoutes(app, deps) {
         if (!PROTECTED_PAGES.has(req.path) && req.path !== '/') return next();
         if (req.method !== 'GET') return next();
 
-        let userId = null;
-        let token = req.headers.authorization;
-        if (token && token.startsWith('Bearer ')) token = token.split(' ')[1];
-        else token = req.headers['x-session-token'];
-
-        if (!token && req.headers.cookie) {
-            const m = req.headers.cookie.match(/(?:^|;\s*)sessionToken=([^;]+)/);
-            if (m) token = m[1];
-        }
-        if (req.session && req.session.userId) userId = req.session.userId;
-
-        if (token && !userId) {
-            try {
-                const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback');
-                if (decoded && decoded.userId) userId = decoded.userId;
-            } catch (_) {}
-            if (!userId && persistentSessions && persistentSessions[token]) {
-                userId = persistentSessions[token].userId;
-            }
-        }
-
+        const userId = resolveUserId(req, persistentSessions);
         if (!userId) return next();
 
         try {
             const result = await pool.query('SELECT restriction FROM users WHERE id = $1', [userId]);
             if (result.rows.length > 0 && result.rows[0].restriction === true) {
-                console.warn(` [restriction-block] ${userId} حاول الوصول لـ ${req.path}`);
-                return res.redirect('/restriction.html');
+                const { token, reference } = issueRestrictionToken(userId);
+                console.warn(' [restriction-block] user ' + userId + ' blocked from ' + req.path + ' ref=' + reference);
+                auditLog && auditLog('RESTRICTION_REDIRECT', { userId, ip: getIP ? getIP(req) : req.ip, details: { path: req.path, reference } });
+                res.set('Cache-Control', 'no-store');
+                return res.redirect(302, '/restriction.html/' + token);
             }
-        } catch (e) {
-            // في حال فشل DB، اسمح بالمرور (آمن)
-        }
+        } catch (e) {}
         next();
     };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  middleware افتراضي (قبل mount — يسمح بمرور كل شيء)
-// ═══════════════════════════════════════════════════════════════════════════
 async function requireNotRestricted(req, res, next) {
     next();
 }
 
-module.exports = { mountRestrictionRoutes, requireNotRestricted };
+module.exports = { mountRestrictionRoutes, requireNotRestricted, issueRestrictionToken };

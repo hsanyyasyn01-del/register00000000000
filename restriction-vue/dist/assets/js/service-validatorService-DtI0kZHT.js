@@ -1,0 +1,1 @@
+function r(t){if(!t)return!1;const n=String(t).trim();return n.length<2||n.length>40?!1:/^[a-zA-Z0-9_.؀-ۿ]+$/.test(n)}function e(t){return/^\d{6}$/.test(String(t||""))}function i(t){return String(t||"").replace(/\D/g,"").slice(0,1)}export{r as a,e as i,i as s};

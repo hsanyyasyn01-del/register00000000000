@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+  ::selection { background: rgba(0, 149, 246, 0.35); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #262626; border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  input, button, textarea { font-family: inherit; }
+}
+
+@layer components {
+  .input-field {
+    @apply w-full bg-panel border border-border rounded-lg p-3.5 text-[#f5f5f5] text-sm transition-all duration-200 text-left placeholder:text-txt-faint;
+    direction: ltr;
+  }
+  .input-field:focus { @apply border-txt-dim ring-1 ring-primary/30 outline-none; }
+  .btn-primary {
+    @apply w-full border-none rounded-lg p-3.5 font-sans text-sm font-bold cursor-pointer flex items-center justify-center gap-2 transition-all duration-200 mb-3 bg-primary text-white;
+  }
+  .btn-primary:hover { @apply bg-primary-hover; }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-primary:disabled { @apply opacity-50 pointer-events-none; }
+  .btn-secondary {
+    @apply w-full bg-transparent text-primary border-none rounded-lg p-3.5 font-sans text-sm font-bold cursor-pointer flex items-center justify-center gap-2 transition-all duration-200 mb-3;
+  }
+  .btn-secondary:hover { @apply text-[#f5f5f5]; }
+  .btn-secondary:active { transform: scale(0.98); }
+  .card-surface {
+    @apply bg-raised border border-hairline rounded-2xl;
+  }
+  .skeleton-shimmer {
+    background: linear-gradient(90deg, #1a1a1a 25%, #262626 50%, #1a1a1a 75%);
+    background-size: 200% 100%;
+    @apply animate-shimmer rounded-lg;
+  }
+}
+
+.step-enter-active { animation: stepIn 0.4s ease; }
+.step-leave-active { animation: stepIn 0.25s ease reverse; }
+@keyframes stepIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}

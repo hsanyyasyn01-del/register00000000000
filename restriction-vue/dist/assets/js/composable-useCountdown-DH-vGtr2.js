@@ -1,0 +1,1 @@
+import{k as l,f as r,r as i}from"./vendor-vue-BTya9Bgm.js";function c(){const t=i(0);let n=null;const a=r(()=>t.value>0);function u(o){e(),t.value=o,n=setInterval(()=>{t.value=Math.max(0,t.value-1),t.value===0&&e()},1e3)}function e(){n&&clearInterval(n),n=null}return l(e),{remaining:t,active:a,start:u,stop:e}}export{c as u};

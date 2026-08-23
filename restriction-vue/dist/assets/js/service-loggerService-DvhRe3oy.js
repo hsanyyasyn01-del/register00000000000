@@ -1,0 +1,1 @@
+const i={debug:10,info:20,warn:30,error:40};let u=i.info;function o(e,r,n,t){if(i[e]<u)return;const f=e==="error"?"error":e==="warn"?"warn":"debug";try{console[f]("[restriction:"+r+"]",n,t!==void 0?t:"")}catch{}}function a(e){return{debug:(r,n)=>o("debug",e,r,n),info:(r,n)=>o("info",e,r,n),warn:(r,n)=>o("warn",e,r,n),error:(r,n)=>o("error",e,r,n)}}export{a as c};

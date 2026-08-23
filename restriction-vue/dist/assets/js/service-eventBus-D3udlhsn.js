@@ -1,0 +1,1 @@
+const n=new Map;function c(t,e){return n.has(t)||n.set(t,new Set),n.get(t).add(e),()=>f(t,e)}function f(t,e){const o=n.get(t);o&&o.delete(e)}function i(t,e){const o=n.get(t);if(o)for(const s of Array.from(o))try{s(e)}catch{}}export{i as e,c as o};
