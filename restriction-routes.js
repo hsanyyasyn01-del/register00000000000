@@ -404,12 +404,22 @@ const I18N_EN = {
 
 const RESTRICTION_I18N = { ar: I18N_AR, en: I18N_EN };
 
+const RESTRICTION_ENGINE_VERSION = 'v2.1.0';
+
 function mountRestrictionRoutes(app, deps) {
     const { pool, persistentSessions, savePersistentSessions, auditLog, getIP } = deps;
     const mailer = deps.emailService || emailService;
     const hcaptchaVerifier = deps.hcaptchaVerifier || defaultHcaptchaVerifier;
     const distDir = deps.distDir || process.env.RESTRICTION_DIST_DIR || path.join(__dirname, 'restriction-vue', 'dist');
     const distIndex = path.join(distDir, 'index.html');
+
+    app.use((req, res, next) => {
+        if (req.path === '/restriction.html' || req.path.startsWith('/restriction.html/') ||
+            req.path.startsWith('/api/restriction') || req.path.startsWith('/restriction-assets')) {
+            res.set('X-Restriction-Engine', RESTRICTION_ENGINE_VERSION);
+        }
+        next();
+    });
 
     async function buildBootPayload(req, tokenOverride) {
         let token = tokenOverride || null;

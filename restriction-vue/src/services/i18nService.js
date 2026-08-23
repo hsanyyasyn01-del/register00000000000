@@ -25,6 +25,7 @@ export function localBundle(code) {
 export async function fetchRemoteMessages(code) {
   try {
     if (storageRead(DISABLE_KEY) === true) return null
+    if (window.__RESTRICTION_BOOT__) return null
     const { ok, status, data } = await httpGet(ENDPOINTS.i18n(code))
     if (status === 401 || status === 403) {
       try { storageWrite(DISABLE_KEY, true) } catch (e) {}

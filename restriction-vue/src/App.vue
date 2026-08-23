@@ -33,9 +33,9 @@ import { useSessionStore } from './stores/session'
 import { useAppealStore, TOTAL_STEPS } from './stores/appeal'
 import { useI18nStore } from './stores/i18n'
 import { useUiStore } from './stores/ui'
-import { fetchBootstrap } from './services/bootstrapService'
+import { fetchBootstrap, hasInjectedBoot } from './services/bootstrapService'
 import { startHeartbeat, stopHeartbeat } from './services/heartbeatService'
-import { configureTelemetry, track } from './services/telemetryService'
+import { configureTelemetry, disableTelemetry, track } from './services/telemetryService'
 import { on as onBus } from './services/eventBus'
 import { useDocumentTitle } from './composables/useDocumentTitle'
 import SplashScreen from './components/SplashScreen.vue'
@@ -98,11 +98,14 @@ onMounted(async () => {
   if (boot && boot.features) config.features = { ...config.features, ...boot.features }
   if (boot && boot.links) config.links = { ...config.links, ...boot.links }
 
-  configureTelemetry({ enabled: !boot.features || boot.features.telemetryEnabled !== false })
+  const injectedBoot = hasInjectedBoot()
+  configureTelemetry({ enabled: !injectedBoot && (!boot.features || boot.features.telemetryEnabled !== false) })
 
   await i18n.init(readLangHint())
 
   await session.boot()
+
+  if (session.source === 'injected') disableTelemetry()
 
   if (session.phase === 'ready' && session.profile) {
     appeal.syncFromProfile(session.profile)

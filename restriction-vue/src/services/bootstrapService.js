@@ -14,6 +14,14 @@ const FALLBACK = {
   serverTime: null,
 }
 
+export function hasInjectedBoot() {
+  try {
+    return !!window.__RESTRICTION_BOOT__
+  } catch (e) {
+    return false
+  }
+}
+
 export function readInjectedConfig() {
   try {
     const boot = window.__RESTRICTION_BOOT__
