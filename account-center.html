@@ -1,0 +1,1213 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>مركز الحسابات - Cosmos</title>
+<link rel="icon" type="image/png" href="/1234.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --panel:     #21262d;
+    --border:    #30363d;
+    --txt:       #f0f6fc;
+    --txt-dim:   #8b949e;
+    --green:     #238636;
+    --green-h:   #2ea043;
+    --green-dim: rgba(35,134,54,0.2);
+    --danger:    #ef4444;
+    --danger-dim:rgba(239,68,68,.12);
+    --warn:      #d29922;
+    --warn-dim:  rgba(210,153,34,.12);
+    --blue:      #58a6ff;
+    --radius:    10px;
+    --safe-t:    env(safe-area-inset-top,0px);
+    --safe-b:    env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;outline:none;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--txt);display:none;flex-direction:row}
+
+/* ── RAIL ─────────────────── */
+#rail{
+    width:60px;flex-shrink:0;
+    background:var(--surface);border-left:1px solid var(--border);
+    display:flex;flex-direction:column;align-items:center;
+    padding:calc(12px + var(--safe-t)) 0 calc(12px + var(--safe-b));
+    gap:4px;z-index:50;position:relative;
+}
+#rail::before{content:'';position:absolute;top:0;right:0;left:0;height:2px;background:linear-gradient(90deg,var(--green),var(--green-h))}
+.rb{
+    width:44px;height:44px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:17px;color:var(--txt-dim);cursor:pointer;
+    border:none;background:none;text-decoration:none;
+    transition:background .2s,color .2s;flex-shrink:0;position:relative;
+}
+.rb:hover{background:var(--panel);color:var(--txt)}
+.rb:active{transform:scale(.9)}
+.rb.active{color:var(--green)}
+.rb.active::after{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:20px;background:var(--green);border-radius:0 3px 3px 0}
+.rail-sep{width:28px;height:1px;background:var(--border);margin:4px 0;flex-shrink:0}
+.rail-space{flex:1}
+.rail-av{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid var(--border);cursor:pointer;flex-shrink:0;transition:border-color .15s}
+.rail-av:hover{border-color:var(--green)}
+
+/* ── MAIN ─────────────────────────────────── */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+#hd{
+    display:flex;align-items:center;gap:12px;padding:0 16px;
+    height:58px;background:var(--surface);border-bottom:1px solid var(--border);
+    flex-shrink:0;position:relative;
+}
+#hd::before{content:'';position:absolute;top:0;right:0;left:0;height:2px;background:linear-gradient(90deg,var(--green),var(--green-h))}
+.hd-back{
+    width:38px;height:38px;border-radius:10px;
+    background:var(--panel);border:none;color:var(--txt);font-size:15px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    transition:background .2s,transform .15s;
+}
+.hd-back:active{transform:scale(.9)}
+.hd-title{font-size:17px;font-weight:700;flex:1}
+.hd-sub{font-size:11px;color:var(--txt-dim);font-weight:500;margin-top:1px}
+
+/* ── TABS ─────────────────────────────────── */
+.tabs{display:flex;gap:4px;padding:10px 12px;overflow-x:auto;border-bottom:1px solid var(--border);background:var(--surface);scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{
+    flex-shrink:0;padding:8px 14px;border-radius:50px;
+    background:var(--panel);border:1px solid transparent;color:var(--txt-dim);
+    font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;
+    font-family:'Cairo',sans-serif;display:flex;align-items:center;gap:6px;
+}
+.tab:hover{background:var(--border);color:var(--txt)}
+.tab.active{background:var(--green);color:#fff;border-color:var(--green)}
+.tab i{font-size:12px}
+
+/* ── SCROLL ─────────────────────────────────── */
+#scroll{flex:1;overflow-y:auto;padding:16px;scrollbar-width:thin;scrollbar-color:var(--panel) transparent}
+#scroll::-webkit-scrollbar{width:6px}
+#scroll::-webkit-scrollbar-thumb{background:var(--panel);border-radius:3px}
+
+/* ── SECTIONS ─────────────────────────────────── */
+.section{display:none;max-width:720px;margin:0 auto;animation:fade .25s ease}
+.section.act{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ── CARDS ─────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.card-h-ico{
+    width:32px;height:32px;border-radius:8px;background:var(--green-dim);
+    color:var(--green);display:flex;align-items:center;justify-content:center;
+    font-size:14px;flex-shrink:0;
+}
+.card-h h3{font-size:15px;font-weight:700;flex:1}
+.card-h p{font-size:12px;color:var(--txt-dim);font-weight:400}
+
+/* ── HERO ─────────────────── */
+.hero{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+.hero-av{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--border);cursor:pointer;flex-shrink:0;transition:border-color .15s}
+.hero-av:hover{border-color:var(--green)}
+.hero-info{flex:1;min-width:0}
+.hero-name{font-size:17px;font-weight:800;margin-bottom:2px}
+.hero-user{font-size:12px;color:var(--txt-dim);margin-bottom:10px}
+.hero-stats{display:flex;gap:16px;flex-wrap:wrap}
+.hero-stat{text-align:center}
+.hero-stat-n{font-size:15px;font-weight:800}
+.hero-stat-l{font-size:11px;color:var(--txt-dim)}
+
+/* ── FORM ITEMS ─────────────────────────────────── */
+.fi-wrap{position:relative;margin-bottom:12px}
+.fi{
+    width:100%;padding:12px 14px;background:var(--panel);
+    border:1px solid var(--border);border-radius:8px;color:var(--txt);
+    font-size:14px;font-family:'Cairo',sans-serif;transition:border-color .15s;
+}
+.fi:focus{border-color:var(--green)}
+.fi-pw-toggle{position:absolute;left:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--txt-dim);cursor:pointer;padding:6px;font-size:14px}
+.fi-label{display:block;font-size:12px;font-weight:600;color:var(--txt-dim);margin-bottom:6px}
+.fi-hint{font-size:11px;color:var(--txt-dim);margin-top:4px}
+textarea.fi{resize:vertical;min-height:70px;font-family:'Cairo',sans-serif}
+select.fi{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%238b949e'><path d='M7 10l5 5 5-5z'/></svg>");background-repeat:no-repeat;background-position:left 12px center;padding-left:34px}
+
+/* ── BUTTONS ─────────────────────────────────── */
+.btn{
+    padding:10px 16px;border-radius:8px;border:none;
+    font-size:14px;font-weight:700;cursor:pointer;font-family:'Cairo',sans-serif;
+    transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:var(--green-h)}
+.btn-ghost{background:var(--panel);color:var(--txt)}
+.btn-ghost:hover{background:var(--border)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{background:#dc2626}
+.btn-warn{background:var(--warn-dim);color:var(--warn);border:1px solid var(--warn)}
+.btn-block{width:100%}
+.btn-sm{padding:6px 12px;font-size:12px}
+
+/* ── TOGGLE ─────────────────── */
+.toggle{position:relative;width:44px;height:26px;display:inline-block;flex-shrink:0}
+.toggle input{display:none}
+.toggle-slider{position:absolute;inset:0;background:var(--panel);border:1px solid var(--border);border-radius:50px;cursor:pointer;transition:background .2s}
+.toggle-slider::before{content:'';position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:2px;right:2px;transition:transform .2s}
+.toggle input:checked + .toggle-slider{background:var(--green);border-color:var(--green)}
+.toggle input:checked + .toggle-slider::before{transform:translateX(-18px)}
+
+/* ── ROW ─────────────────── */
+.row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:none}
+.row-ico{width:34px;height:34px;border-radius:8px;background:var(--panel);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--txt-dim);flex-shrink:0}
+.row-info{flex:1;min-width:0}
+.row-title{font-size:14px;font-weight:600}
+.row-sub{font-size:12px;color:var(--txt-dim);margin-top:2px}
+
+/* ── PILLS ─────────────────── */
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.pill{
+    padding:7px 12px;border-radius:50px;background:var(--panel);
+    border:1px solid var(--border);color:var(--txt-dim);font-size:12px;font-weight:600;
+    cursor:pointer;transition:all .15s;font-family:'Cairo',sans-serif;display:flex;align-items:center;gap:6px;
+}
+.pill:hover{background:var(--border);color:var(--txt)}
+.pill.active{background:var(--green);color:#fff;border-color:var(--green)}
+
+/* ── OTP INPUT ─────────────────────────────────── */
+.otp-wrap{display:flex;gap:8px;justify-content:center;direction:ltr;margin:18px 0}
+.otp-inp{
+    width:46px;height:54px;text-align:center;font-size:20px;font-weight:700;
+    background:var(--panel);border:2px solid var(--border);border-radius:8px;
+    color:var(--txt);font-family:monospace;transition:border-color .15s;
+}
+.otp-inp:focus{border-color:var(--green)}
+.otp-inp.filled{border-color:var(--green)}
+
+/* ── SESSION ─────────────────── */
+.session{display:flex;align-items:center;gap:12px;padding:12px;background:var(--panel);border:1px solid var(--border);border-radius:8px;margin-bottom:8px}
+.session-info{flex:1;min-width:0}
+.session-title{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+.session-meta{font-size:11px;color:var(--txt-dim);margin-top:4px}
+.session-current{background:var(--green-dim);border-color:var(--green)}
+.session-badge{padding:2px 8px;border-radius:50px;font-size:10px;font-weight:700;background:var(--green);color:#fff}
+
+/* ── DANGER ZONE ─────────────────── */
+.danger-zone{border:1px solid var(--danger);background:var(--danger-dim);border-radius:var(--radius);padding:16px;margin-top:14px}
+.danger-zone .card-h-ico{background:var(--danger-dim);color:var(--danger)}
+.danger-zone .row-ico{color:var(--danger)}
+/* ── LANGUAGE GRID ── */
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.lang-card{
+    padding:14px 10px;border-radius:var(--radius);
+    background:var(--panel);border:2px solid transparent;
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    cursor:pointer;transition:all .15s;text-align:center;
+}
+.lang-card:hover{background:var(--border);transform:translateY(-2px)}
+.lang-card.active{border-color:var(--green);background:var(--green-dim)}
+.lang-flag{font-size:28px;line-height:1}
+.lang-name{font-size:13px;font-weight:700;color:var(--txt)}
+.lang-native{font-size:11px;color:var(--txt-dim)}
+.lang-card.active .lang-native{color:var(--green-h)}
+
+/* ── TOAST ─────────────────────────────────── */
+#toast{
+    position:fixed;bottom:calc(20px + var(--safe-b));left:50%;
+    transform:translateX(-50%) translateY(80px);
+    background:var(--panel);color:#fff;padding:12px 20px;border-radius:50px;
+    font-size:13px;font-weight:600;z-index:9999;display:flex;align-items:center;gap:8px;
+    opacity:0;transition:all .25s;box-shadow:0 8px 24px rgba(0,0,0,.4);max-width:90vw;
+    border:1px solid var(--border);
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.error{background:var(--danger);border-color:var(--danger)}
+#toast.ok{background:var(--green);border-color:var(--green)}
+#toast i{font-size:14px}
+
+/* ── OVERLAY + MODAL ─────────────────────────────────── */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:9998;display:none;align-items:center;justify-content:center;padding:16px}
+#overlay.show{display:flex}
+.modal{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:20px;max-width:420px;width:100%;max-height:90vh;overflow-y:auto;
+    animation:pop .2s ease;
+}
+@keyframes pop{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:none}}
+.modal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.modal-h h3{font-size:17px;font-weight:800}
+.modal-close{background:none;border:none;color:var(--txt-dim);font-size:20px;cursor:pointer;padding:4px 8px}
+.modal-close:hover{color:var(--txt)}
+.modal-sub{font-size:13px;color:var(--txt-dim);margin-bottom:16px;line-height:1.6}
+
+/* ── LOADER ─────────────────────────────────── */
+.loader{text-align:center;padding:30px;color:var(--txt-dim)}
+.loader i{font-size:24px;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── DEVICE BANNER ─────────────────── */
+.device-banner{
+    display:flex;align-items:center;gap:10px;padding:10px 14px;
+    background:var(--green-dim);border:1px solid var(--green);
+    border-radius:8px;margin-bottom:12px;font-size:12px;color:var(--txt-dim);
+}
+.device-banner i{color:var(--green);font-size:14px}
+.device-banner b{color:var(--txt)}
+
+/* ── COUNTDOWN ─────────────────────────────────── */
+.countdown{font-size:12px;color:var(--txt-dim);margin-top:8px;text-align:center}
+.countdown.active{color:var(--warn)}
+
+/* ── MOBILE ─────────────────────────────────── */
+@media(max-width:768px){
+    #rail{width:54px}
+    #hd{padding:0 12px}
+    .hd-title{font-size:16px}
+    #scroll{padding:12px}
+    .card{padding:14px}
+    .hero-av{width:60px;height:60px}
+    .hero-stats{gap:12px}
+    .otp-inp{width:40px;height:48px;font-size:18px}
+}
+</style>
+</head>
+<body>
+
+<!-- ── RAIL ─────────────────────────────────── -->
+<div id="rail">
+  <button class="rb active" data-tab="profile" onclick="switchTab('profile',this)" title="الملف الشخصي"><i class="fas fa-user"></i></button>
+  <button class="rb" data-tab="contact" onclick="switchTab('contact',this)" title="التواصل"><i class="fas fa-link"></i></button>
+  <button class="rb" data-tab="security" onclick="switchTab('security',this)" title="الأمان"><i class="fas fa-shield-halved"></i></button>
+  <button class="rb" data-tab="sessions" onclick="switchTab('sessions',this)" title="الجلسات"><i class="fas fa-mobile-screen"></i></button>
+  <button class="rb" data-tab="data" onclick="switchTab('data',this)" title="البيانات"><i class="fas fa-database"></i></button>
+  <button class="rb" data-tab="language" onclick="switchTab('language',this)" title="اللغة"><i class="fas fa-language"></i></button>
+  <div class="rail-space"></div>
+  <div class="rail-sep"></div>
+  <button class="rb" onclick="goBack()" title="رجوع"><i class="fas fa-arrow-right"></i></button>
+  <button class="rb" onclick="logout()" title="خروج"><i class="fas fa-right-from-bracket"></i></button>
+  <img class="rail-av" id="railAv" src="/1234.png" onerror="this.src='https://cdn-icons-png.flaticon.com/512/149/149071.png'">
+</div>
+
+<!-- ── MAIN ─────────────────────────────────── -->
+<div id="main">
+  <header id="hd">
+    <button class="hd-back" onclick="goBack()"><i class="fas fa-arrow-right"></i></button>
+    <div style="flex:1">
+      <div class="hd-title" id="hdTitle">مركز الحسابات</div>
+      <div class="hd-sub" id="hdSub">جاري التحميل...</div>
+    </div>
+  </header>
+
+  <div class="tabs" id="tabBar">
+    <button class="tab active" data-tab="profile" onclick="switchTab('profile',this)"><i class="fas fa-user"></i>الملف</button>
+    <button class="tab" data-tab="contact" onclick="switchTab('contact',this)"><i class="fas fa-link"></i>التواصل</button>
+    <button class="tab" data-tab="security" onclick="switchTab('security',this)"><i class="fas fa-shield-halved"></i>الأمان</button>
+    <button class="tab" data-tab="sessions" onclick="switchTab('sessions',this)"><i class="fas fa-mobile-screen"></i>الجلسات</button>
+    <button class="tab" data-tab="data" onclick="switchTab('data',this)"><i class="fas fa-database"></i>البيانات</button>
+    <button class="tab" data-tab="language" onclick="switchTab('language',this)"><i class="fas fa-language"></i>اللغة</button>
+  </div>
+
+  <div id="scroll">
+
+    <!-- ═══════════ PROFILE ═══════════ -->
+    <div class="section act" id="sec-profile">
+      <div class="loader" id="profileLoader"><i class="fas fa-circle-notch"></i></div>
+      <div id="profileContent" style="display:none">
+        <!-- Hero card -->
+        <div class="card">
+          <div class="hero">
+            <img class="hero-av" id="heroAv" src="/1234.png" onerror="this.src='https://cdn-icons-png.flaticon.com/512/149/149071.png'" onclick="document.getElementById('avFile').click()">
+            <div class="hero-info">
+              <div class="hero-name" id="heroName">—</div>
+              <div class="hero-user" id="heroUser">@—</div>
+              <div class="hero-stats">
+                <div class="hero-stat"><div class="hero-stat-n" id="stReels">—</div><div class="hero-stat-l">ريلز</div></div>
+                <div class="hero-stat"><div class="hero-stat-n" id="stComments">—</div><div class="hero-stat-l">تعليق</div></div>
+                <div class="hero-stat"><div class="hero-stat-n" id="stLikes">—</div><div class="hero-stat-l">إعجاب</div></div>
+                <div class="hero-stat"><div class="hero-stat-n" id="stFollowing">—</div><div class="hero-stat-l">متابَع</div></div>
+              </div>
+            </div>
+          </div>
+          <input type="file" id="avFile" accept="image/*" style="display:none" onchange="uploadAvatar(this)">
+          <button class="btn btn-ghost btn-block" onclick="document.getElementById('avFile').click()"><i class="fas fa-camera"></i> تغيير الصورة</button>
+        </div>
+
+        <!-- Display name edit -->
+        <div class="card">
+          <div class="card-h"><div class="card-h-ico"><i class="fas fa-id-card"></i></div><div><h3>الاسم المعروض</h3><p>يظهر في ملفك الشخصي</p></div></div>
+          <div class="fi-wrap">
+            <input class="fi" id="inDisplayName" type="text" placeholder="اسمك المعروض" maxlength="50">
+          </div>
+          <button class="btn btn-primary btn-block" id="btnSaveDisplayName" onclick="saveDisplayName()"><i class="fas fa-floppy-disk"></i> حفظ الاسم</button>
+        </div>
+
+        <!-- Bio edit -->
+        <div class="card">
+          <div class="card-h"><div class="card-h-ico"><i class="fas fa-comment-dots"></i></div><div><h3>النبذة</h3><p>نبذة قصيرة عنك</p></div></div>
+          <div class="fi-wrap">
+            <textarea class="fi" id="inBio" rows="3" placeholder="أضف نبذة عنك..." maxlength="300"></textarea>
+            <div class="fi-hint"><span id="bioCount">0</span>/300</div>
+          </div>
+          <button class="btn btn-primary btn-block" id="btnSaveBio" onclick="saveBio()"><i class="fas fa-floppy-disk"></i> حفظ النبذة</button>
+        </div>
+
+        <!-- Username edit -->
+        <div class="card">
+          <div class="card-h"><div class="card-h-ico"><i class="fas fa-at"></i></div><div><h3>اسم المستخدم</h3><p>تغيير username الخاص بك</p></div></div>
+          <div class="fi-wrap">
+            <input class="fi" id="inUsername" type="text" placeholder="username" maxlength="30">
+            <div class="fi-hint">أحرف، أرقام، _ فقط (3-30)</div>
+          </div>
+          <button class="btn btn-primary btn-block" id="btnSaveUsername" onclick="saveUsername()"><i class="fas fa-floppy-disk"></i> حفظ اسم المستخدم</button>
+        </div>
+
+        <!-- Banner -->
+        <div class="card">
+          <div class="card-h"><div class="card-h-ico"><i class="fas fa-image"></i></div><div><h3>صورة الغلاف</h3><p>تظهر أعلى ملفك</p></div></div>
+          <div style="margin-bottom:12px;border-radius:8px;overflow:hidden;background:var(--panel);aspect-ratio:3/1;display:flex;align-items:center;justify-content:center">
+            <img id="bannerPreview" src="" style="width:100%;height:100%;object-fit:cover;display:none">
+            <span id="bannerPlaceholder" style="color:var(--txt-dim);font-size:12px">لا توجد صورة غلاف</span>
+          </div>
+          <input type="file" id="bannerFile" accept="image/*" style="display:none" onchange="uploadBanner(this)">
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost" style="flex:1" onclick="document.getElementById('bannerFile').click()"><i class="fas fa-upload"></i> رفع</button>
+            <button class="btn btn-danger" style="flex:1" id="btnDelBanner" onclick="deleteBanner()"><i class="fas fa-trash"></i> حذف</button>
+          </div>
+        </div>
+
+        <!-- Preview profile -->
+        <div class="card">
+          <div class="card-h"><div class="card-h-ico"><i class="fas fa-eye"></i></div><div><h3>معاينة الملف</h3></div></div>
+          <button class="btn btn-primary btn-block" onclick="previewProfile()"><i class="fas fa-external-link-alt"></i> افتح ملفي</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ CONTACT (روابط التواصل) ═══════════ -->
+    <div class="section" id="sec-contact">
+      <div class="card">
+        <div class="card-h"><div class="card-h-ico"><i class="fas fa-link"></i></div><div><h3>روابط التواصل الاجتماعية</h3><p>تظهر في صفحة بروفايلك</p></div></div>
+        <div class="pills" id="contactPills"></div>
+        <div id="contactForm" style="display:none">
+          <div class="fi-wrap">
+            <label class="fi-label" id="contactLabel">—</label>
+            <input class="fi" id="inContact" type="text" placeholder="أدخل القيمة..." maxlength="200">
+            <div class="fi-hint" id="contactHint"></div>
+          </div>
+          <button class="btn btn-primary btn-block" id="btnAddContact" onclick="saveContact()"><i class="fas fa-floppy-disk"></i> حفظ</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><div class="card-h-ico"><i class="fas fa-list"></i></div><div><h3>الروابط الحالية</h3><p>تظهر في صفحة بروفايلك مباشرة</p></div></div>
+        <div id="contactList"><div class="loader"><i class="fas fa-circle-notch"></i></div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════ SECURITY (تغيير كلمة المرور) ═══════════ -->
+    <div class="section" id="sec-security">
+      <div class="card">
+        <div class="card-h"><div class="card-h-ico"><i class="fas fa-key"></i></div><div><h3>تغيير كلمة المرور</h3><p>أدخل كلمة المرور الحالية والجديدة</p></div></div>
+        <div class="fi-wrap">
+          <label class="fi-label">كلمة المرور الحالية</label>
+          <input class="fi" id="inCurPw" type="password" placeholder="••••••••" style="padding-left:40px">
+          <button class="fi-pw-toggle" onclick="togglePw('inCurPw',this)"><i class="fas fa-eye"></i></button>
+        </div>
+        <div class="fi-wrap">
+          <label class="fi-label">كلمة المرور الجديدة</label>
+          <input class="fi" id="inNewPw" type="password" placeholder="••••••••" style="padding-left:40px" oninput="checkPwStrength()">
+          <button class="fi-pw-toggle" onclick="togglePw('inNewPw',this)"><i class="fas fa-eye"></i></button>
+          <div id="pwStrength" style="height:4px;border-radius:2px;margin-top:6px;transition:all .2s"></div>
+          <div class="fi-hint" id="pwStrengthText">8+ أحرف مع رقم</div>
+        </div>
+        <div class="fi-wrap">
+          <label class="fi-label">تأكيد كلمة المرور</label>
+          <input class="fi" id="inConfPw" type="password" placeholder="••••••••" style="padding-left:40px">
+          <button class="fi-pw-toggle" onclick="togglePw('inConfPw',this)"><i class="fas fa-eye"></i></button>
+        </div>
+        <button class="btn btn-primary btn-block" id="btnSavePw" onclick="changePassword()"><i class="fas fa-shield-halved"></i> تغيير كلمة المرور</button>
+      </div>
+    </div>
+
+    <!-- ═══════════ SESSIONS (الجلسات النشطة) ═══════════ -->
+    <div class="section" id="sec-sessions">
+      <div class="device-banner">
+        <i class="fas fa-laptop"></i>
+        <div>الجهاز الحالي: <b id="currentDevice">—</b></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><div class="card-h-ico"><i class="fas fa-mobile-screen"></i></div><div><h3>الجلسات النشطة</h3><p>إدارة الأجهزة المتصلة بحسابك</p></div></div>
+        <div id="sessionsList"><div class="loader"><i class="fas fa-circle-notch"></i></div></div>
+        <button class="btn btn-danger btn-block" style="margin-top:10px" onclick="openModal('modalLogoutAll')"><i class="fas fa-right-from-bracket"></i> إنهاء كل الجلسات الأخرى</button>
+      </div>
+    </div>
+
+    <!-- ═══════════ DATA (البيانات + الحذف) ═══════════ -->
+    <div class="section" id="sec-data">
+      <!-- ملخص المحتوى -->
+      <div class="card">
+        <div class="card-h"><div class="card-h-ico"><i class="fas fa-chart-bar"></i></div><div><h3>ملخص المحتوى</h3><p>إحصائيات حسابك</p></div></div>
+        <div id="contentSummary"><div class="loader"><i class="fas fa-circle-notch"></i></div></div>
+      </div>
+
+      <!-- حذف بالجملة -->
+      <div class="card">
+        <div class="card-h"><div class="card-h-ico"><i class="fas fa-trash"></i></div><div><h3>حذف المحتوى بالجملة</h3><p>يستلزم كلمة المرور</p></div></div>
+        <button class="btn btn-warn btn-block" style="margin-bottom:8px" onclick="openModal('modalDelAllLikes')"><i class="fas fa-heart"></i> حذف كل الإعجابات</button>
+        <button class="btn btn-warn btn-block" style="margin-bottom:8px" onclick="openModal('modalDelAllComments')"><i class="fas fa-comment"></i> حذف كل التعليقات</button>
+        <button class="btn btn-warn btn-block" onclick="openModal('modalDelAllReels')"><i class="fas fa-film"></i> حذف كل الريلز</button>
+      </div>
+
+      <!-- منطقة الخطر -->
+      <div class="danger-zone">
+        <div class="card-h"><div class="card-h-ico"><i class="fas fa-triangle-exclamation"></i></div><div><h3 style="color:var(--danger)">منطقة الخطر</h3></div></div>
+        <div class="row">
+          <div class="row-ico"><i class="fas fa-user-slash"></i></div>
+          <div class="row-info"><div class="row-title">حذف الحساب نهائياً</div><div class="row-sub">لا يمكن التراجع</div></div>
+          <button class="btn btn-danger btn-sm" onclick="openModal('modalDelAccount')">حذف</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ LANGUAGE (اللغة والترجمة) ═══════════ -->
+    <div class="section" id="sec-language">
+      <div class="card">
+        <div class="card-h"><div class="card-h-ico"><i class="fas fa-language"></i></div><div><h3>لغة الواجهة</h3><p>اختر لغة عرض الموقع — يتم حفظها في حسابك</p></div></div>
+        <div class="loader" id="langLoader"><i class="fas fa-circle-notch"></i></div>
+        <div id="langContent" style="display:none">
+          <div class="grid-2" id="langGrid"></div>
+          <div class="fi-hint" style="text-align:center;margin-top:10px" id="langActiveHint">—</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><div class="card-h-ico"><i class="fas fa-info-circle"></i></div><div><h3>ملاحظة</h3></div></div>
+        <p style="font-size:13px;color:var(--txt-dim);line-height:1.7">بعض الصفحات قد تحتاج إلى إعادة تحميل لتطبيق اللغة الجديدة بالكامل. يتم حفظ اختيارك في خادم حسابك وعلى هذا الجهاز.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── TOAST ─────────────────────────────────── -->
+<div id="toast"><i class="fas fa-check-circle"></i><span></span></div>
+
+<!-- ── OVERLAY + MODALS ─────────────────────────────────── -->
+<div id="overlay" onclick="closeModal()">
+  <!-- Logout all sessions modal -->
+  <div class="modal" id="modalLogoutAll" onclick="event.stopPropagation()">
+    <div class="modal-h"><h3>إنهاء كل الجلسات</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="modal-sub">سيتم إنهاء جميع الجلسات الأخرى. أكد بكلمة المرور.</div>
+    <div class="fi-wrap">
+      <input class="fi" id="inLogoutPw" type="password" placeholder="كلمة المرور" style="padding-left:40px">
+      <button class="fi-pw-toggle" onclick="togglePw('inLogoutPw',this)"><i class="fas fa-eye"></i></button>
+    </div>
+    <button class="btn btn-danger btn-block" id="btnLogoutAll" onclick="logoutAllSessions()">إنهاء الكل</button>
+  </div>
+
+  <!-- Delete all likes -->
+  <div class="modal" id="modalDelAllLikes" onclick="event.stopPropagation()">
+    <div class="modal-h"><h3>حذف كل الإعجابات</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="modal-sub">سيتم حذف كل إعجاباتك على كل الريلز. لا يمكن التراجع.</div>
+    <div class="fi-wrap">
+      <input class="fi" id="inDelLikesPw" type="password" placeholder="كلمة المرور" style="padding-left:40px">
+      <button class="fi-pw-toggle" onclick="togglePw('inDelLikesPw',this)"><i class="fas fa-eye"></i></button>
+    </div>
+    <button class="btn btn-danger btn-block" id="btnDelAllLikes" onclick="bulkDelete('all-likes','inDelLikesPw','btnDelAllLikes')">حذف الكل</button>
+  </div>
+
+  <!-- Delete all comments -->
+  <div class="modal" id="modalDelAllComments" onclick="event.stopPropagation()">
+    <div class="modal-h"><h3>حذف كل التعليقات</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="modal-sub">سيتم حذف كل تعليقاتك على كل الريلز. لا يمكن التراجع.</div>
+    <div class="fi-wrap">
+      <input class="fi" id="inDelCommentsPw" type="password" placeholder="كلمة المرور" style="padding-left:40px">
+      <button class="fi-pw-toggle" onclick="togglePw('inDelCommentsPw',this)"><i class="fas fa-eye"></i></button>
+    </div>
+    <button class="btn btn-danger btn-block" id="btnDelAllComments" onclick="bulkDelete('all-comments','inDelCommentsPw','btnDelAllComments')">حذف الكل</button>
+  </div>
+
+  <!-- Delete all reels -->
+  <div class="modal" id="modalDelAllReels" onclick="event.stopPropagation()">
+    <div class="modal-h"><h3>حذف كل الريلز</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="modal-sub">سيتم حذف كل ريلزك نهائياً (مع ملفات الفيديو). لا يمكن التراجع.</div>
+    <div class="fi-wrap">
+      <input class="fi" id="inDelReelsPw" type="password" placeholder="كلمة المرور" style="padding-left:40px">
+      <button class="fi-pw-toggle" onclick="togglePw('inDelReelsPw',this)"><i class="fas fa-eye"></i></button>
+    </div>
+    <button class="btn btn-danger btn-block" id="btnDelAllReels" onclick="bulkDelete('all-reels','inDelReelsPw','btnDelAllReels')">حذف الكل</button>
+  </div>
+
+  <!-- Delete account -->
+  <div class="modal" id="modalDelAccount" onclick="event.stopPropagation()">
+    <div class="modal-h"><h3 style="color:var(--danger)">حذف الحساب</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="modal-sub">⚠️ سيتم حذف حسابك وكل بياناتك نهائياً. لا يمكن التراجع.</div>
+    <div class="fi-wrap">
+      <input class="fi" id="inDelAccPw" type="password" placeholder="كلمة المرور" style="padding-left:40px">
+      <button class="fi-pw-toggle" onclick="togglePw('inDelAccPw',this)"><i class="fas fa-eye"></i></button>
+    </div>
+    <div class="fi-wrap">
+      <label class="fi-label">اكتب: DELETE_MY_ACCOUNT</label>
+      <input class="fi" id="inDelAccConfirm" type="text" placeholder="DELETE_MY_ACCOUNT" autocomplete="off">
+    </div>
+    <button class="btn btn-danger btn-block" id="btnDelAccount" onclick="deleteAccount()">حذف حسابي نهائياً</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+// 🌐 CONFIG
+// ════════════════════════════════════════════════
+// 📌 نستخدم MEDIA_BASE لكل الطلبات (server_reels.js يحتوي على /api/account/me)
+const MEDIA_BASE = (window.MEDIA_URL || 'https://2-mmdv.onrender.com/api2');
+const NGROK_HEADER = { 'ngrok-skip-browser-warning': 'true', 'bypass-tunnel-reminder': 'true' };
+
+let me = null;
+let myToken = null;
+
+// ════════════════════════════════════════════════
+// 🔧 HELPERS
+// ════════════════════════════════════════════════
+function getToken() {
+  return localStorage.getItem('sessionToken') ||
+         localStorage.getItem('hassani_token') ||
+         localStorage.getItem('session_token') ||
+         localStorage.getItem('Cosmos_session') ||
+         '';
+}
+function getHeaders(extra = {}) {
+  const h = { 'Content-Type': 'application/json', ...NGROK_HEADER, ...extra };
+  const t = getToken();
+  if (t) { h['Authorization'] = 'Bearer ' + t; h['x-session-token'] = t; }
+  return h;
+}
+function toAbsUrl(p) {
+  if (!p) return 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
+  if (p.startsWith('http')) return p;
+  if (p.startsWith('/uploads/')) return MEDIA_BASE + p;
+  return MEDIA_BASE + (p.startsWith('/') ? p : '/' + p);
+}
+async function api(method, path, body) {
+  try {
+    const opts = { method, headers: getHeaders() };
+    if (body && method !== 'GET') opts.body = JSON.stringify(body);
+    const res = await fetch(MEDIA_BASE + path, opts);
+    const text = await res.text();
+    let json; try { json = JSON.parse(text); } catch(_) { json = { success: false, message: text }; }
+    if (!res.ok && !json.success) throw new Error(json.message || json.error || ('HTTP ' + res.status));
+    return json;
+  } catch (e) {
+    toast(e.message, 'error');
+    return null;
+  }
+}
+function toast(msg, type = 'ok') {
+  const t = document.getElementById('toast');
+  t.className = type;
+  t.querySelector('span').textContent = msg;
+  t.querySelector('i').className = type === 'error' ? 'fas fa-exclamation-circle' : (type === 'warn' ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+function openModal(id) {
+  document.getElementById('overlay').classList.add('show');
+  document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+  const m = document.getElementById(id);
+  if (m) m.style.display = 'block';
+}
+function closeModal() { document.getElementById('overlay').classList.remove('show'); }
+function esc(s) { if (s == null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtNum(n) { n = +n || 0; if (n >= 1e6) return (n/1e6).toFixed(1)+'M'; if (n >= 1e3) return (n/1e3).toFixed(1)+'K'; return String(n); }
+function setLoading(btnId, on) { const b = document.getElementById(btnId); if (!b) return; if (on) { b._html = b.innerHTML; b.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>'; b.disabled = true; } else { if (b._html) b.innerHTML = b._html; b.disabled = false; } }
+function togglePw(id, btn) { const i = document.getElementById(id); if (!i) return; if (i.type === 'password') { i.type = 'text'; btn.querySelector('i').className = 'fas fa-eye-slash'; } else { i.type = 'password'; btn.querySelector('i').className = 'fas fa-eye'; } }
+
+// ════════════════════════════════════════════════
+// 🧭 NAVIGATION
+// ════════════════════════════════════════════════
+function switchTab(name, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('act'));
+  const sec = document.getElementById('sec-' + name);
+  if (sec) sec.classList.add('act');
+  document.querySelectorAll('.rb').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('[data-tab="' + name + '"]').forEach(b => b.classList.add('active'));
+  const titles = { profile:'الملف الشخصي', contact:'طرق التواصل', security:'الأمان', sessions:'الجلسات النشطة', data:'البيانات', language:'اللغة والترجمة' };
+  document.getElementById('hdTitle').textContent = titles[name] || 'مركز الحسابات';
+  document.getElementById('hdSub').textContent = me ? ('@' + (me.username || '')) : '';
+  document.getElementById('scroll').scrollTop = 0;
+  // 📌 تحميل كسول للأقسام
+  if (name === 'contact') loadContacts();
+  if (name === 'sessions') loadSessions();
+  if (name === 'data') loadContentSummary();
+  if (name === 'language') loadLanguage();
+}
+function goBack() { history.length > 1 ? history.back() : (location.href = '/messenger1.html'); }
+function logout() { localStorage.clear(); location.href = '/login.html'; }
+
+// ════════════════════════════════════════════════
+// 🚀 INIT — الخطوة 1: تحميل بيانات المستخدم
+// ════════════════════════════════════════════════
+async function init() {
+  myToken = getToken();
+  if (!myToken) { location.href = '/login.html'; return; }
+  document.body.style.display = 'flex';
+
+  // 📌 استخدم /api/account/me من server_reels.js (موجود ويعمل)
+  const j = await api('GET', '/api/account/me');
+  if (!j || !j.success || !j.data) {
+    toast('تعذر تحميل البيانات — تحقق من اتصالك', 'warn');
+    return;
+  }
+  me = j.data;
+  // 📌 عرض البيانات
+  document.getElementById('hdSub').textContent = '@' + (me.username || '');
+  document.getElementById('railAv').src = me.avatar ? toAbsUrl(me.avatar) : 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
+  renderProfile();
+  detectCurrentDevice();
+}
+
+function renderProfile() {
+  document.getElementById('profileLoader').style.display = 'none';
+  document.getElementById('profileContent').style.display = '';
+  document.getElementById('heroAv').src = me.avatar ? toAbsUrl(me.avatar) : 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
+  document.getElementById('heroName').textContent = me.display_name || me.username || '—';
+  document.getElementById('heroUser').textContent = '@' + (me.username || '');
+  // 📌 إحصائيات المحتوى من /api/account/me
+  const cs = me.content_stats || {};
+  document.getElementById('stReels').textContent = fmtNum(cs.reels || 0);
+  document.getElementById('stComments').textContent = fmtNum(cs.comments || 0);
+  document.getElementById('stLikes').textContent = fmtNum(cs.likes || 0);
+  document.getElementById('stFollowing').textContent = fmtNum(cs.following || 0);
+  // 📌 ملء الحقول
+  document.getElementById('inDisplayName').value = me.display_name || me.username || '';
+  document.getElementById('inBio').value = me.bio || '';
+  document.getElementById('bioCount').textContent = (me.bio || '').length;
+  document.getElementById('inUsername').value = me.username || '';
+  // 📌 عداد النبذة
+  document.getElementById('inBio').addEventListener('input', e => document.getElementById('bioCount').textContent = e.target.value.length);
+  // 📌 تحميل البانر
+  loadBanner();
+}
+
+// 📌 placeholders للخطوات القادمة
+async function loadBanner() {
+  if (!me || !me.id) return;
+  try {
+    const j = await api('GET', '/api/user/' + me.id + '/banner');
+    if (j && j.success && j.banner) {
+      const url = j.banner.startsWith('http') ? j.banner : (MEDIA_BASE + j.banner);
+      document.getElementById('bannerPreview').src = url;
+      document.getElementById('bannerPreview').style.display = '';
+      document.getElementById('bannerPlaceholder').style.display = 'none';
+    }
+  } catch (_) {}
+}
+
+// ════════════════════════════════════════════════
+// 👤 الميزة 2: تعديل الاسم المعروض (display-name)
+// ════════════════════════════════════════════════
+async function saveDisplayName() {
+  const displayName = document.getElementById('inDisplayName').value.trim();
+  if (!displayName) { toast('الاسم مطلوب', 'error'); return; }
+  setLoading('btnSaveDisplayName', true);
+  try {
+    // 📌 PUT /api/account/profile/display-name — body: { displayName }
+    const j = await api('PUT', '/api/account/profile/display-name', { displayName });
+    if (j && j.success) {
+      toast('تم حفظ الاسم');
+      me.display_name = j.display_name || displayName;
+      document.getElementById('heroName').textContent = me.display_name;
+    }
+  } finally { setLoading('btnSaveDisplayName', false); }
+}
+
+// ════════════════════════════════════════════════
+// 👤 الميزة 3: تعديل النبذة (bio)
+// ════════════════════════════════════════════════
+async function saveBio() {
+  const bio = document.getElementById('inBio').value.trim();
+  if (!me || !me.id) return;
+  setLoading('btnSaveBio', true);
+  try {
+    // 📌 PUT /api/user/:id/bio — body: { bio }
+    const j = await api('PUT', '/api/user/' + me.id + '/bio', { bio });
+    if (j && j.success) {
+      toast('تم حفظ النبذة');
+      me.bio = bio;
+    }
+  } finally { setLoading('btnSaveBio', false); }
+}
+
+// ════════════════════════════════════════════════
+// 👤 الميزة 4: تعديل اسم المستخدم (username)
+// ════════════════════════════════════════════════
+async function saveUsername() {
+  const username = document.getElementById('inUsername').value.trim();
+  if (!me || !me.id) return;
+  if (!username.match(/^[a-zA-Z0-9_\u0600-\u06FF]{3,30}$/)) {
+    toast('اسم المستخدم غير صالح (3-30 حرف/رقم/_)', 'error');
+    return;
+  }
+  setLoading('btnSaveUsername', true);
+  try {
+    // 📌 PUT /api/user/:id/username — body: { username }
+    const j = await api('PUT', '/api/user/' + me.id + '/username', { username });
+    if (j && j.success) {
+      toast('تم حفظ اسم المستخدم');
+      me.username = username;
+      document.getElementById('heroUser').textContent = '@' + username;
+      document.getElementById('hdSub').textContent = '@' + username;
+    }
+  } finally { setLoading('btnSaveUsername', false); }
+}
+
+// ════════════════════════════════════════════════
+// 📸 الميزة 5: رفع الصورة الشخصية (avatar)
+// ════════════════════════════════════════════════
+async function uploadAvatar(inp) {
+  if (!inp.files || !inp.files[0] || !me || !me.id) return;
+  const fd = new FormData();
+  fd.append('avatar', inp.files[0]);
+  setLoading('btnSaveDisplayName', true); // reuse any button for loader
+  try {
+    // 📌 POST /api/user/:id/avatar — multipart/form-data
+    const res = await fetch(MEDIA_BASE + '/api/user/' + me.id + '/avatar', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + myToken, 'x-session-token': myToken, ...NGROK_HEADER },
+      body: fd
+    });
+    const j = await res.json();
+    if (j.success) {
+      toast('تم تحديث الصورة');
+      // 📌 أعد تحميل بيانات المستخدم للحصول على avatar جديد
+      await init();
+    } else {
+      throw new Error(j.message || 'فشل الرفع');
+    }
+  } catch (e) { toast(e.message, 'error'); }
+  finally { setLoading('btnSaveDisplayName', false); inp.value = ''; }
+}
+
+// ════════════════════════════════════════════════
+// 🖼️ الميزة 6: رفع/حذف البانر (banner)
+// ════════════════════════════════════════════════
+async function uploadBanner(inp) {
+  if (!inp.files || !inp.files[0] || !me || !me.id) return;
+  const fd = new FormData();
+  fd.append('banner', inp.files[0]);
+  try {
+    const res = await fetch(MEDIA_BASE + '/api/user/' + me.id + '/banner', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + myToken, 'x-session-token': myToken, ...NGROK_HEADER },
+      body: fd
+    });
+    const j = await res.json();
+    if (j.success) { toast('تم رفع الغلاف'); loadBanner(); }
+    else throw new Error(j.message);
+  } catch (e) { toast(e.message, 'error'); }
+  inp.value = '';
+}
+
+async function deleteBanner() {
+  if (!me || !me.id) return;
+  if (!confirm('حذف صورة الغلاف؟')) return;
+  // 📌 لا يوجد DELETE endpoint في server_reels.js — نستخدم POST مع banner=null
+  // 📌 في الواقع، الـ endpoint موجود: نرسل banner فارغ
+  try {
+    // 📌 محاولة 1: DELETE
+    const res = await fetch(MEDIA_BASE + '/api/user/' + me.id + '/banner', {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    if (res.ok) {
+      const j = await res.json();
+      if (j.success) {
+        document.getElementById('bannerPreview').style.display = 'none';
+        document.getElementById('bannerPlaceholder').style.display = '';
+        toast('تم الحذف');
+        return;
+      }
+    }
+    toast('تعذر الحذف — جرب رفع غلاف جديد بدلاً منه', 'warn');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function previewProfile() { if (me && me.id) location.href = '/3251.html?id=' + me.id; }
+
+// ════════════════════════════════════════════════
+// 🔑 الميزة 7: تغيير كلمة المرور
+// ════════════════════════════════════════════════
+function checkPwStrength() {
+  const pw = document.getElementById('inNewPw').value;
+  const bar = document.getElementById('pwStrength');
+  const txt = document.getElementById('pwStrengthText');
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[a-zA-Z\u0600-\u06FF]/.test(pw) && /[0-9]/.test(pw)) score++;
+  if (/[^a-zA-Z0-9\u0600-\u06FF]/.test(pw)) score++;
+  const colors = ['#ef4444', '#d29922', '#d29922', '#238636', '#238636'];
+  const labels = ['ضعيفة جداً', 'ضعيفة', 'متوسطة', 'قوية', 'قوية جداً'];
+  if (pw.length === 0) { bar.style.background = 'transparent'; txt.textContent = '8+ أحرف مع رقم'; return; }
+  bar.style.background = colors[Math.min(score, 4)];
+  txt.textContent = labels[Math.min(score, 4)];
+}
+
+async function changePassword() {
+  const cur = document.getElementById('inCurPw').value;
+  const neu = document.getElementById('inNewPw').value;
+  const conf = document.getElementById('inConfPw').value;
+  if (!cur || !neu || !conf) { toast('املأ كل الحقول', 'error'); return; }
+  if (neu !== conf) { toast('كلمتا المرور غير متطابقتين', 'error'); return; }
+  if (neu.length < 8) { toast('كلمة المرور قصيرة (8 أحرف على الأقل)', 'error'); return; }
+  if (!/[0-9]/.test(neu)) { toast('كلمة المرور يجب أن تحتوي على رقم', 'error'); return; }
+  if (cur === neu) { toast('كلمة المرور الجديدة يجب أن تختلف', 'error'); return; }
+
+  setLoading('btnSavePw', true);
+  try {
+    // 📌 PUT /api/account/password — body: { currentPassword, newPassword }
+    // 📌 السيرفر يقبل camelCase (بعد الإصلاح)
+    const j = await api('PUT', '/api/account/password', { currentPassword: cur, newPassword: neu });
+    if (j && j.success) {
+      toast('تم تغيير كلمة المرور بنجاح');
+      document.getElementById('inCurPw').value = '';
+      document.getElementById('inNewPw').value = '';
+      document.getElementById('inConfPw').value = '';
+    }
+  } finally { setLoading('btnSavePw', false); }
+}
+
+// ════════════════════════════════════════════════
+// 🔗 الميزة 8: روابط التواصل (social-links — نفس جدول صفحة البروفايل)
+// ════════════════════════════════════════════════
+const CONTACT_TYPES = [
+  { id:'instagram', label:'Instagram', icon:'fab fa-instagram', placeholder:'username', hint:'بدون @' },
+  { id:'tiktok',    label:'TikTok',    icon:'fab fa-tiktok',    placeholder:'username', hint:'بدون @' },
+  { id:'twitter',   label:'Twitter/X', icon:'fab fa-x-twitter', placeholder:'username', hint:'بدون @' },
+  { id:'youtube',   label:'YouTube',   icon:'fab fa-youtube',   placeholder:'username', hint:'اسم المستخدم' },
+  { id:'facebook',  label:'Facebook',  icon:'fab fa-facebook',  placeholder:'username', hint:'اسم المستخدم' },
+  { id:'telegram',  label:'Telegram',  icon:'fab fa-telegram',  placeholder:'@username', hint:'مع @' },
+  { id:'whatsapp',  label:'WhatsApp',  icon:'fab fa-whatsapp',  placeholder:'phone', hint:'مع رمز الدولة' },
+  { id:'snapchat',  label:'Snapchat',  icon:'fab fa-snapchat',  placeholder:'username', hint:'بدون @' },
+  { id:'github',    label:'GitHub',    icon:'fab fa-github',    placeholder:'username', hint:'بدون @' },
+  { id:'website',   label:'Website',   icon:'fas fa-globe',     placeholder:'https://...', hint:'رابط كامل يبدأ بـ http' },
+];
+let currentContactType = null;
+
+function renderContactPills() {
+  document.getElementById('contactPills').innerHTML = CONTACT_TYPES.map(t =>
+    `<button class="pill" data-type="${t.id}" onclick="selContactType('${t.id}')"><i class="${t.icon}"></i>${t.label}</button>`
+  ).join('');
+}
+function selContactType(typeId) {
+  currentContactType = typeId;
+  document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.type === typeId));
+  const t = CONTACT_TYPES.find(x => x.id === typeId);
+  if (!t) return;
+  document.getElementById('contactLabel').textContent = t.label;
+  document.getElementById('inContact').placeholder = t.placeholder;
+  document.getElementById('contactHint').textContent = t.hint;
+  document.getElementById('contactForm').style.display = '';
+  // 📌 املأ الحقل بالقيمة الحالية لو موجودة
+  if (me && me._socialLinks && me._socialLinks[typeId]) {
+    document.getElementById('inContact').value = me._socialLinks[typeId];
+  } else {
+    document.getElementById('inContact').value = '';
+  }
+}
+
+async function loadContacts() {
+  if (!me || !me.id) return;
+  // 📌 GET /api/user/:id/social-links (نفس endpoint الذي تقرأه صفحة البروفايل)
+  const j = await api('GET', '/api/user/' + me.id + '/social-links');
+  const list = document.getElementById('contactList');
+  if (!j || !j.success) {
+    list.innerHTML = '<div style="text-align:center;color:var(--txt-dim);padding:20px">تعذر التحميل</div>';
+    return;
+  }
+  const data = j.data || {};
+  me._socialLinks = data; // 📌 احفظها للاستخدام لاحقاً
+  const items = Object.entries(data).filter(([k,v]) => v && CONTACT_TYPES.find(t => t.id === k));
+  if (items.length === 0) {
+    list.innerHTML = '<div style="text-align:center;color:var(--txt-dim);padding:20px">لا توجد روابط بعد. اختر نوعاً من الأعلى وأضف رابطك.</div>';
+    return;
+  }
+  const typeMap = Object.fromEntries(CONTACT_TYPES.map(t => [t.id, t]));
+  list.innerHTML = items.map(([k,v]) => {
+    const t = typeMap[k] || { icon: 'fas fa-ellipsis', label: k };
+    let href = v;
+    if (k === 'instagram') href = 'https://instagram.com/' + String(v).replace('@','');
+    if (k === 'tiktok') href = 'https://tiktok.com/@' + String(v).replace('@','');
+    if (k === 'twitter') href = 'https://x.com/' + String(v).replace('@','');
+    if (k === 'youtube' && !v.startsWith('http')) href = 'https://youtube.com/@' + v;
+    if (k === 'telegram') href = 'https://t.me/' + String(v).replace('@','');
+    if (k === 'whatsapp') href = 'https://wa.me/' + String(v).replace(/[^0-9]/g,'');
+    if (k === 'snapchat') href = 'https://snapchat.com/add/' + v;
+    if (k === 'github') href = 'https://github.com/' + v;
+    if (k === 'facebook' && !v.startsWith('http')) href = 'https://facebook.com/' + v;
+    return `<div class="row">
+      <div class="row-ico"><i class="${t.icon}"></i></div>
+      <div class="row-info"><div class="row-title">${t.label}</div><div class="row-sub">${esc(v)}</div></div>
+      <a href="${esc(href)}" target="_blank" class="btn btn-ghost btn-sm"><i class="fas fa-external-link-alt"></i></a>
+      <button class="btn btn-danger btn-sm" onclick="deleteContact('${k}')"><i class="fas fa-trash"></i></button>
+    </div>`;
+  }).join('');
+}
+
+async function saveContact() {
+  if (!me || !me.id) return;
+  const value = document.getElementById('inContact').value.trim();
+  if (!value || !currentContactType) { toast('أدخل القيمة', 'error'); return; }
+  // 📌 تحقق من website
+  if (currentContactType === 'website' && !/^https?:\/\/.+/.test(value)) {
+    toast('رابط الموقع يجب أن يبدأ بـ http:// أو https://', 'error');
+    return;
+  }
+  setLoading('btnAddContact', true);
+  try {
+    // 📌 PUT /api/user/:id/social-links — body: { [type]: value }
+    // 📌 نفس endpoint الذي تقرأه صفحة البروفايل
+    const j = await api('PUT', '/api/user/' + me.id + '/social-links', { [currentContactType]: value });
+    if (j && j.success) {
+      toast('تم حفظ الرابط — سيظهر في صفحة بروفايلك');
+      document.getElementById('inContact').value = '';
+      await loadContacts();
+    }
+  } finally { setLoading('btnAddContact', false); }
+}
+
+async function deleteContact(type) {
+  if (!me || !me.id) return;
+  if (!confirm('حذف هذا الرابط؟')) return;
+  // 📌 PUT /api/user/:id/social-links مع قيمة فارغة لحذفه
+  const j = await api('PUT', '/api/user/' + me.id + '/social-links', { [type]: null });
+  if (j && j.success) { toast('تم الحذف'); await loadContacts(); }
+}
+
+// ════════════════════════════════════════════════
+// 📱 الميزة 9: الجلسات النشطة
+// ════════════════════════════════════════════════
+function detectCurrentDevice() {
+  const ua = navigator.userAgent;
+  let browser = 'متصفح';
+  if (/Chrome\/(\d+)/.test(ua) && !/Edg|OPR/.test(ua)) browser = 'Chrome ' + RegExp.$1;
+  else if (/Firefox\/(\d+)/.test(ua)) browser = 'Firefox ' + RegExp.$1;
+  else if (/Safari\/(\d+)/.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
+  let os = 'نظام';
+  if (/Windows/.test(ua)) os = 'Windows';
+  else if (/Mac/.test(ua)) os = 'macOS';
+  else if (/Linux/.test(ua)) os = 'Linux';
+  else if (/Android/.test(ua)) os = 'Android';
+  else if (/iPhone|iPad/.test(ua)) os = 'iOS';
+  const el = document.getElementById('currentDevice');
+  if (el) el.textContent = os + ' · ' + browser;
+}
+
+async function loadSessions() {
+  // 📌 GET /api/account/sessions
+  const j = await api('GET', '/api/account/sessions');
+  const list = document.getElementById('sessionsList');
+  if (!j || !j.success) { list.innerHTML = '<div style="text-align:center;color:var(--txt-dim);padding:20px">تعذر التحميل</div>'; return; }
+  const sessions = j.data || [];
+  if (sessions.length === 0) { list.innerHTML = '<div style="text-align:center;color:var(--txt-dim);padding:20px">لا توجد جلسات نشطة</div>'; return; }
+
+  // 📌 حدد الجلسة الحالية (تطابق أول 8 حروف من token)
+  const myTokenPrefix = (myToken || '').substring(0, 8);
+
+  list.innerHTML = sessions.map(s => {
+    const isCurrent = s.token_hint === myTokenPrefix;
+    const status = s.is_expired ? 'منتهية' : 'نشطة';
+    const statusColor = s.is_expired ? 'var(--danger)' : 'var(--green)';
+    return `<div class="session ${isCurrent ? 'session-current' : ''}">
+      <div class="row-ico"><i class="fas fa-${isCurrent ? 'laptop' : 'mobile-screen'}"></i></div>
+      <div class="session-info">
+        <div class="session-title">${esc(s.username || 'جهاز')} ${isCurrent ? '<span class="session-badge">حالي</span>' : ''}</div>
+        <div class="session-meta">أُنشئت: ${s.created_at ? new Date(s.created_at).toLocaleString('ar') : '—'} · <span style="color:${statusColor}">${status}</span></div>
+      </div>
+      ${isCurrent ? '' : '<button class="btn btn-danger btn-sm" onclick="deleteSession(\'' + esc(s.token_hint) + '\')"><i class="fas fa-xmark"></i></button>'}
+    </div>`;
+  }).join('');
+}
+
+async function deleteSession(tokenHint) {
+  if (!confirm('إنهاء هذه الجلسة؟')) return;
+  // 📌 DELETE /api/account/sessions/:tokenHint
+  const j = await api('DELETE', '/api/account/sessions/' + encodeURIComponent(tokenHint));
+  if (j && j.success) { toast('تم إنهاء الجلسة'); await loadSessions(); }
+}
+
+async function logoutAllSessions() {
+  const pw = document.getElementById('inLogoutPw').value;
+  if (!pw) { toast('أدخل كلمة المرور', 'error'); return; }
+  setLoading('btnLogoutAll', true);
+  try {
+    // 📌 DELETE /api/account/sessions/all — body: { current_password }
+    const j = await api('DELETE', '/api/account/sessions/all', { current_password: pw });
+    if (j && j.success) {
+      toast('تم إنهاء جميع الجلسات الأخرى');
+      closeModal();
+      document.getElementById('inLogoutPw').value = '';
+      await loadSessions();
+    }
+  } finally { setLoading('btnLogoutAll', false); }
+}
+
+// ════════════════════════════════════════════════
+// 📊 الميزة 10: ملخص المحتوى
+// ════════════════════════════════════════════════
+async function loadContentSummary() {
+  // 📌 GET /api/account/content/summary
+  const j = await api('GET', '/api/account/content/summary');
+  const el = document.getElementById('contentSummary');
+  if (!j || !j.success) { el.innerHTML = '<div style="text-align:center;color:var(--txt-dim);padding:20px">تعذر التحميل</div>'; return; }
+  const d = j.data || {};
+  el.innerHTML = `<div class="hero-stats" style="justify-content:space-around">
+    <div class="hero-stat"><div class="hero-stat-n">${fmtNum(d.reels || 0)}</div><div class="hero-stat-l">ريلز</div></div>
+    <div class="hero-stat"><div class="hero-stat-n">${fmtNum(d.comments || 0)}</div><div class="hero-stat-l">تعليق</div></div>
+    <div class="hero-stat"><div class="hero-stat-n">${fmtNum(d.likes || 0)}</div><div class="hero-stat-l">إعجاب</div></div>
+    <div class="hero-stat"><div class="hero-stat-n">${fmtNum(d.following || 0)}</div><div class="hero-stat-l">متابَع</div></div>
+    <div class="hero-stat"><div class="hero-stat-n">${fmtNum(d.followers || 0)}</div><div class="hero-stat-l">متابع</div></div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════
+// 🗑 الميزة 11: حذف بالجملة
+// ════════════════════════════════════════════════
+async function bulkDelete(type, pwInputId, btnId) {
+  const pw = document.getElementById(pwInputId).value;
+  if (!pw) { toast('أدخل كلمة المرور', 'error'); return; }
+  if (!confirm('تأكيد الحذف؟ لا يمكن التراجع.')) return;
+  setLoading(btnId, true);
+  try {
+    // 📌 DELETE /api/account/content/all-likes | all-comments | all-reels
+    // 📌 body: { current_password }
+    const j = await api('DELETE', '/api/account/content/' + type, { current_password: pw });
+    if (j && j.success) {
+      toast('تم الحذف: ' + (j.removed || 'الكل'));
+      closeModal();
+      document.getElementById(pwInputId).value = '';
+      await loadContentSummary();
+    }
+  } finally { setLoading(btnId, false); }
+}
+
+// ════════════════════════════════════════════════
+// 🚫 الميزة 12: حذف الحساب نهائياً
+// ════════════════════════════════════════════════
+async function deleteAccount() {
+  const pw = document.getElementById('inDelAccPw').value;
+  const confirmText = document.getElementById('inDelAccConfirm').value;
+  if (!pw) { toast('أدخل كلمة المرور', 'error'); return; }
+  if (confirmText !== 'DELETE_MY_ACCOUNT') { toast('نص التأكيد غير صحيح', 'error'); return; }
+  if (!confirm('⚠️ تأكيد نهائي: سيتم حذف حسابك وكل بياناتك. لا يمكن التراجع.')) return;
+  setLoading('btnDelAccount', true);
+  try {
+    // 📌 DELETE /api/account/delete — body: { current_password, confirm }
+    const j = await api('DELETE', '/api/account/delete', { current_password: pw, confirm: confirmText });
+    if (j && j.success) {
+      toast('تم حذف الحساب');
+      setTimeout(logout, 1500);
+    }
+  } finally { setLoading('btnDelAccount', false); }
+}
+
+// ════════════════════════════════════════════════
+// 🌍 LANGUAGE — اختيار لغة العرض
+// ════════════════════════════════════════════════
+const LANG_META = {
+  ar: { flag:'🇲🇷', native:'العربية',  en:'Arabic' },
+  en: { flag:'🇬🇧', native:'English',  en:'English' },
+  fr: { flag:'🇫🇷', native:'Français', en:'French' },
+  he: { flag:'🇮🇱', native:'עברית',     en:'Hebrew' }
+};
+
+let currentLangState = { lang:'ar', dir:'rtl', supported:['ar','en','fr','he'] };
+
+async function loadLanguage() {
+  const grid = document.getElementById('langGrid');
+  const hint = document.getElementById('langActiveHint');
+  if (!grid) return;
+  grid.innerHTML = '';
+  document.getElementById('langLoader').style.display = '';
+  document.getElementById('langContent').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/plugins/i18n/me', { headers: getHeaders() });
+    const j = await res.json();
+    if (j && j.success) {
+      currentLangState.lang = j.lang || 'ar';
+      currentLangState.dir = j.dir || 'rtl';
+      if (j.supported && j.supported.length) currentLangState.supported = j.supported;
+    }
+  } catch (_) {/* fallback to defaults */}
+
+  // prefer client-side detection if auto.js is injected
+  try {
+    const ls = localStorage.userLang;
+    if (ls) currentLangState.lang = ls;
+  } catch (_) {}
+
+  renderLangGrid();
+  document.getElementById('langLoader').style.display = 'none';
+  document.getElementById('langContent').style.display = '';
+  hint.textContent = 'اللغة الحالية: ' + ((LANG_META[currentLangState.lang]||{}).native || currentLangState.lang);
+}
+
+function renderLangGrid() {
+  const grid = document.getElementById('langGrid');
+  grid.innerHTML = currentLangState.supported.map(code => {
+    const m = LANG_META[code] || { flag:'🌐', native:code, en:code };
+    const active = (code === currentLangState.lang) ? ' active' : '';
+    return '<div class="lang-card'+active+'" data-lang="'+code+'" onclick="chooseLang(\''+code+'\')">'
+         +    '<div class="lang-flag">'+m.flag+'</div>'
+         +    '<div class="lang-name">'+m.en+'</div>'
+         +    '<div class="lang-native">'+m.native+'</div>'
+         + '</div>';
+  }).join('');
+}
+
+async function chooseLang(code) {
+  if (!code || !LANG_META[code]) { toast('لغة غير مدعومة','error'); return; }
+  if (code === currentLangState.lang) return;
+  document.querySelectorAll('.lang-card').forEach(c => c.classList.toggle('active', c.dataset.lang === code));
+  try {
+    await fetch('/api/plugins/i18n/me', {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify({ lang: code })
+    });
+  } catch (_) {}
+  if (window.i18n && typeof window.i18n.setLang === 'function') {
+    try { await window.i18n.setLang(code); } catch (_) {}
+  }
+  try { localStorage.userLang = code; } catch (_) {}
+  try { localStorage.setItem('Cosmos-language', code); } catch (_) {}
+  try { document.cookie = 'userLang='+code+';path=/;max-age='+(365*24*3600); } catch (_) {}
+  currentLangState.lang = code;
+  document.getElementById('langActiveHint').textContent = 'اللغة الحالية: ' + ((LANG_META[code]||{}).native || code);
+  toast('تم تغيير اللغة إلى ' + ((LANG_META[code]||{}).native || code));
+  setTimeout(() => {
+    if (confirm('هل تريد إعادة تحميل الصفحة لتطبيق اللغة الجديدة بالكامل؟')) {
+      const u = new URL(location.href);
+      u.searchParams.set('lang', code);
+      location.href = u.toString();
+    }
+  }, 600);
+}
+
+// ════════════════════════════════════════════════
+// 🚀 BOOT
+// ════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  renderContactPills();
+  init();
+});
+</script>
+
+  <script src="/js/i18n-fallback.js" defer></script>
+<script src="/js/lang-switch.js" defer></script>
+</body>
+</html>
