@@ -1,9 +1,4 @@
-import { httpGet } from './http'
-import { ENDPOINTS } from './endpoints'
 import { calibrateServerTime } from './clockService'
-import { read as storageRead, write as storageWrite } from './storageService'
-
-const DISABLE_KEY = 'bootstrap-disabled'
 
 const FALLBACK = {
   success: true,
@@ -30,26 +25,11 @@ export function readInjectedConfig() {
   return null
 }
 
-export async function fetchBootstrap(timeoutMs = 8000) {
+export async function fetchBootstrap() {
   const injected = readInjectedConfig()
   if (injected) {
     if (injected.serverTime) calibrateServerTime(injected.serverTime, 0)
     return { ...FALLBACK, ...injected, success: true, source: 'injected' }
   }
-  if (storageRead(DISABLE_KEY) === true) return { ...FALLBACK, source: 'fallback' }
-  try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    const { ok, status, data, elapsed } = await httpGet(ENDPOINTS.bootstrap, { signal: controller.signal })
-    clearTimeout(timer)
-    if (status === 401 || status === 403) {
-      try { storageWrite(DISABLE_KEY, true) } catch (e) {}
-      return { ...FALLBACK, source: 'fallback' }
-    }
-    if (!ok || !data || data.success !== true) return { ...FALLBACK, source: 'fallback' }
-    if (data.serverTime) calibrateServerTime(data.serverTime, elapsed || 0)
-    return { ...FALLBACK, ...data, source: 'remote' }
-  } catch (e) {
-    return { ...FALLBACK, source: 'fallback' }
-  }
+  return { ...FALLBACK, source: 'fallback' }
 }

@@ -404,7 +404,7 @@ const I18N_EN = {
 
 const RESTRICTION_I18N = { ar: I18N_AR, en: I18N_EN };
 
-const RESTRICTION_ENGINE_VERSION = 'v2.1.0';
+const RESTRICTION_ENGINE_VERSION = 'v2.2.0';
 
 function mountRestrictionRoutes(app, deps) {
     const { pool, persistentSessions, savePersistentSessions, auditLog, getIP } = deps;
@@ -467,10 +467,10 @@ function mountRestrictionRoutes(app, deps) {
     app.get('/api/restriction/status', async (req, res) => {
         try {
             const userId = resolveUserId(req, persistentSessions);
-            if (!userId) return res.json({ success: true, restricted: false });
+            if (!userId) return res.json({ success: true, restricted: false, authenticated: false, cfg: buildRestrictionConfig() });
 
             const profile = await fetchRestrictionProfile(pool, userId);
-            if (!profile) return res.json({ success: true, restricted: false });
+            if (!profile) return res.json({ success: true, restricted: false, authenticated: false, cfg: buildRestrictionConfig() });
 
             if (profile.restricted === true) {
                 const { token, reference } = issueRestrictionToken(userId);
@@ -478,6 +478,7 @@ function mountRestrictionRoutes(app, deps) {
                 return res.json({
                     success: true,
                     restricted: true,
+                    authenticated: true,
                     reason: profile.reason,
                     restrictedAt: profile.restrictedAt,
                     appealStatus: profile.appealStatus,
@@ -488,24 +489,27 @@ function mountRestrictionRoutes(app, deps) {
                     token,
                     reference,
                     url: '/restriction.html/' + token,
-                    profile
+                    profile,
+                    cfg: buildRestrictionConfig()
                 });
             }
 
             res.json({
                 success: true,
                 restricted: false,
+                authenticated: true,
                 reason: null,
                 restrictedAt: null,
                 appealStatus: profile.appealStatus,
                 appealDate: profile.appealDate,
                 username: profile.username,
                 displayName: profile.displayName,
-                avatar: profile.avatar
+                avatar: profile.avatar,
+                cfg: buildRestrictionConfig()
             });
         } catch (err) {
             console.error('[restriction/status] error:', err.message);
-            res.json({ success: true, restricted: false });
+            res.json({ success: true, restricted: false, authenticated: false });
         }
     });
 

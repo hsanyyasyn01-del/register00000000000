@@ -1,0 +1,1 @@
+import{h as r}from"./service-http-DWF2B2xu.js";import{E as a}from"./service-endpoints-0dfPsBvY.js";async function e(){try{const t=await r(a.status);return!t.ok||!t.data?null:t.data}catch{return null}}export{e as f};

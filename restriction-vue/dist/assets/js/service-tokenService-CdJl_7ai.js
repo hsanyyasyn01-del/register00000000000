@@ -1,0 +1,1 @@
+const e=/restriction\.html\/([A-Za-z0-9]+)/;function n(){const t=window.location.pathname.match(e);return t?t[1]:""}function o(t){try{const r="/restriction.html/"+t;return window.history.replaceState({restrictionToken:t},"",r),!0}catch{return!1}}export{o as a,n as r};

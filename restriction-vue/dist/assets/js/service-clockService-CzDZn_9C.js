@@ -1,1 +1,0 @@
-let t=0,e=!1;function i(r,a=0){const n=new Date(r).getTime();return Number.isNaN(n)?!1:(t=n+Math.round(a/2)-Date.now(),e=!0,!0)}function o(){return Date.now()+(e?t:0)}function s(){return new Date(o()).toISOString()}function u(){return e}function c(){return e?t:0}export{i as a,c,u as i,s as n};

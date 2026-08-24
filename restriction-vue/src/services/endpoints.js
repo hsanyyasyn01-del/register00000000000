@@ -1,11 +1,5 @@
 export const ENDPOINTS = {
-  bootstrap: '/api/restriction/bootstrap',
-  i18n: (locale) => '/api/restriction/i18n/' + encodeURIComponent(locale),
-  session: (token) => '/api/restriction/session/' + encodeURIComponent(token),
-  token: '/api/restriction/token',
   status: '/api/restriction/status',
-  heartbeat: '/api/restriction/heartbeat',
-  telemetry: '/api/restriction/telemetry',
   logout: '/api/restriction/logout',
   verifyCaptcha: '/api/restriction/appeal/verify-captcha',
   sendOtp: '/api/restriction/appeal/send-otp',

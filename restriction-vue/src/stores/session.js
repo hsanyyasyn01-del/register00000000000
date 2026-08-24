@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { readTokenFromUrl, replaceUrlToken } from '../services/tokenService'
-import { fetchSessionProfile, mintSessionToken, fetchRestrictionStatus } from '../services/sessionService'
+import { fetchRestrictionStatus } from '../services/sessionService'
 import { read as storageRead, write as storageWrite } from '../services/storageService'
 import { track } from '../services/telemetryService'
 
@@ -15,6 +15,22 @@ function readInjectedPayload() {
   return null
 }
 
+function legacyProfileFromStatus(status) {
+  if (!status || status.restricted !== true) return null
+  return {
+    username: status.username || null,
+    displayName: typeof status.displayName !== 'undefined' ? status.displayName : null,
+    avatar: typeof status.avatar !== 'undefined' ? status.avatar : null,
+    restricted: true,
+    restrictedAt: status.restrictedAt || null,
+    reason: status.reason || null,
+    appealStatus: status.appealStatus || 'none',
+    appealDate: status.appealDate || null,
+    photoExpiresAt: null,
+    reference: status.reference || null,
+  }
+}
+
 export const useSessionStore = defineStore('session', {
   state: () => ({
     phase: 'boot',
@@ -23,12 +39,14 @@ export const useSessionStore = defineStore('session', {
     authStatus: null,
     source: '',
     injectedConfig: null,
+    statusConfig: null,
     attempts: 0,
   }),
 
   getters: {
     hasProfile: (state) => !!state.profile,
     reference: (state) => (state.profile && state.profile.reference) || '',
+    runtimeConfig: (state) => state.injectedConfig || state.statusConfig || null,
   },
 
   actions: {
@@ -40,6 +58,31 @@ export const useSessionStore = defineStore('session', {
       try {
         storageWrite(BOOT_CACHE_KEY, { at: Date.now(), token: this.token, profile })
       } catch (e) {}
+    },
+
+    applyStatus(status) {
+      this.authStatus = status
+      if (status && status.cfg && status.cfg.brand) this.statusConfig = status.cfg
+
+      if (status && status.restricted === true && status.profile && status.profile.restricted === true) {
+        if (status.token) replaceUrlToken(status.token)
+        this.adoptProfile(status.profile, status.token || this.token, 'status-embedded')
+        track('restriction_session_status_embedded', {})
+        return true
+      }
+
+      const legacy = legacyProfileFromStatus(status)
+      if (legacy) {
+        this.adoptProfile(legacy, this.token, 'status-legacy')
+        track('restriction_session_status_legacy', {})
+        return true
+      }
+      return false
+    },
+
+    markRestored() {
+      this.phase = 'restored'
+      try { storageWrite(BOOT_CACHE_KEY, null) } catch (e) {}
     },
 
     async boot() {
@@ -56,21 +99,18 @@ export const useSessionStore = defineStore('session', {
         return
       }
 
-      if (this.token) {
-        const result = await fetchSessionProfile(this.token)
-        if (result.ok) {
-          this.adoptProfile(result.profile, this.token, 'token')
-          track('restriction_session_ok', { reference: result.profile && result.profile.reference })
-          return
-        }
-        if (result.reason === 'NETWORK') {
-          this.phase = 'offline'
-          return
-        }
+      const status = await fetchRestrictionStatus()
+      if (status === null) {
+        this.phase = 'offline'
+        return
       }
+      if (this.applyStatus(status)) return
 
-      const renewed = await this.renew()
-      if (renewed) return
+      if (status.authenticated === true && status.restricted !== true) {
+        this.markRestored()
+        track('restriction_lifted_seen', {})
+        return
+      }
 
       try {
         const cached = storageRead(BOOT_CACHE_KEY)
@@ -89,32 +129,22 @@ export const useSessionStore = defineStore('session', {
     async renew() {
       this.attempts += 1
       const status = await fetchRestrictionStatus()
-      this.authStatus = status
-
-      if (status && status.restricted === true && status.profile && status.profile.restricted === true) {
-        if (status.token) replaceUrlToken(status.token)
-        this.adoptProfile(status.profile, status.token || this.token, 'status-embedded')
-        track('restriction_session_status_embedded', {})
+      if (status === null) return false
+      if (this.applyStatus(status)) return true
+      if (status.authenticated === true && status.restricted !== true) {
+        this.markRestored()
         return true
       }
-      if (!status || status.restricted !== true) {
-        if (status && status.success) return false
-      }
+      return false
+    },
 
-      const minted = await mintSessionToken()
-      if (!minted.ok) return false
-      this.token = minted.token
-      replaceUrlToken(minted.token)
-      if (minted.profile && minted.profile.restricted === true) {
-        this.adoptProfile(minted.profile, minted.token, 'mint-embedded')
-        track('restriction_session_renewed', {})
-        return true
+    async pollOnce() {
+      const status = await fetchRestrictionStatus()
+      if (status === null) return { ok: false, data: null }
+      if (status.authenticated === true && status.restricted !== true && this.phase !== 'restored') {
+        this.markRestored()
       }
-      const result = await fetchSessionProfile(minted.token)
-      if (!result.ok) return false
-      this.adoptProfile(result.profile, minted.token, 'mint')
-      track('restriction_session_renewed', {})
-      return true
+      return { ok: true, data: status }
     },
 
     async retry() {

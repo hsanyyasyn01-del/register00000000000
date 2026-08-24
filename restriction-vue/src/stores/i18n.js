@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { resolveLocale, localBundle, fetchRemoteMessages } from '../services/i18nService'
+import { resolveLocale, localBundle } from '../services/i18nService'
 
 export const useI18nStore = defineStore('i18n', {
   state: () => ({
@@ -17,11 +17,6 @@ export const useI18nStore = defineStore('i18n', {
       this.dir = bundle.meta.dir
       this.messages = { ...bundle.messages }
       this.applyDocumentDirection()
-      const remote = await fetchRemoteMessages(code)
-      if (remote) {
-        this.messages = { ...this.messages, ...remote }
-        this.remoteLoaded = true
-      }
     },
 
     applyDocumentDirection() {
